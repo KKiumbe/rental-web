@@ -16,7 +16,17 @@ import {
   DialogTitle,
   useTheme,
   Box,
+  IconButton,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from "@mui/material";
+import AddIcon from "@mui/icons-material/Add";
+import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
 import TitleComponent from "../components/title";
 import { useNavigate } from "react-router-dom";
@@ -34,7 +44,8 @@ const CreateInvoice = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [formData, setFormData] = useState({ description: "", amount: "", quantity: "" });
+  const [invoiceItems, setInvoiceItems] = useState([]); // List of invoice items
+  const [newItem, setNewItem] = useState({ description: "", amount: "", quantity: "" }); // New item form
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -140,32 +151,82 @@ const CreateInvoice = () => {
     }
   };
 
-  // Handle form field changes
-  const handleFormChange = (field) => (e) => {
-    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
+  // Handle new item form changes
+  const handleNewItemChange = (field) => (e) => {
+    setNewItem((prev) => ({ ...prev, [field]: e.target.value }));
+  };
+
+  // Add new invoice item
+  const handleAddItem = () => {
+    const { description, amount, quantity } = newItem;
+    if (!description || !amount || !quantity) {
+      setSnackbar({ open: true, message: "Please fill in all item fields", severity: "error" });
+      return;
+    }
+    const parsedAmount = parseFloat(amount);
+    const parsedQuantity = parseInt(quantity);
+    if (isNaN(parsedAmount) || parsedAmount <= 0) {
+      setSnackbar({ open: true, message: "Amount must be a positive number", severity: "error" });
+      return;
+    }
+    if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
+      setSnackbar({ open: true, message: "Quantity must be a positive integer", severity: "error" });
+      return;
+    }
+
+    setInvoiceItems((prev) => [
+      ...prev,
+      {
+        description,
+        amount: parsedAmount,
+        quantity: parsedQuantity,
+      },
+    ]);
+    setNewItem({ description: "", amount: "", quantity: "" });
+    setSnackbar({ open: true, message: "Item added successfully", severity: "success" });
+  };
+
+  // Remove invoice item
+  const handleRemoveItem = (index) => {
+    setInvoiceItems((prev) => prev.filter((_, i) => i !== index));
+    setSnackbar({ open: true, message: "Item removed successfully", severity: "info" });
   };
 
   // Create invoice for a single customer
   const handleCreateInvoice = async () => {
-    const { description, amount, quantity } = formData;
-    if (!description || !amount || !quantity || !selectedCustomer) {
-      setSnackbar({ open: true, message: "Please fill in all fields and select a customer", severity: "error" });
+    if (!selectedCustomer) {
+      setSnackbar({ open: true, message: "Please select a customer", severity: "error" });
+      return;
+    }
+    if (invoiceItems.length === 0 && !selectedCustomer.unitId) {
+      setSnackbar({
+        open: true,
+        message: "At least one invoice item is required for customers without a unit",
+        severity: "error",
+      });
       return;
     }
 
     const invoiceData = {
       customerId: selectedCustomer.id,
-      invoiceItemsData: [{ description, amount: parseFloat(amount), quantity: parseInt(quantity) }],
+      isSystemGenerated: false,
+      invoiceItems: invoiceItems,
     };
 
     setLoading(true);
     try {
-      const response = await axios.post(`${BASEURL}/invoices/`, invoiceData, { withCredentials: true });
+      const response = await axios.post(`${BASEURL}/create-invoice`, invoiceData, {
+        withCredentials: true,
+      });
       setSnackbar({ open: true, message: "Invoice created successfully!", severity: "success" });
-      navigate(`/get-invoice/${response.data.newInvoice.id}`);
+      navigate(`/get-invoice/${response.data.data.id}`);
     } catch (error) {
       console.error("Error creating invoice:", error);
-      setSnackbar({ open: true, message: "Failed to create invoice. Please try again.", severity: "error" });
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || "Failed to create invoice. Please try again.",
+        severity: "error",
+      });
     } finally {
       setLoading(false);
     }
@@ -191,7 +252,7 @@ const CreateInvoice = () => {
       console.error("Error generating invoices for all:", error);
       setSnackbar({
         open: true,
-        message: "Failed to generate invoices. Please try again.",
+        message: error.response?.data?.message || "Failed to generate invoices. Please try again.",
         severity: "error",
       });
     } finally {
@@ -232,48 +293,85 @@ const CreateInvoice = () => {
   // Render selected customer
   const renderSelectedCustomer = () =>
     selectedCustomer && (
-      <Card sx={{ mt: 2 }}>
+      <Card sx={{ mt: 2, mb: 2 }}>
         <CardContent>
           <Typography variant="h6">Selected Customer</Typography>
           <Typography>Name: {`${selectedCustomer.firstName} ${selectedCustomer.lastName}`}</Typography>
           <Typography>Phone: {selectedCustomer.phoneNumber}</Typography>
-          <Typography>Category: {selectedCustomer.category}</Typography>
-          <Typography>Monthly Charge: {selectedCustomer.monthlyCharge}</Typography>
-          <Typography>Closing Balance: {selectedCustomer.closingBalance}</Typography>
+          <Typography>Category: {selectedCustomer.category || "N/A"}</Typography>
+          <Typography>Monthly Charge: {selectedCustomer.monthlyCharge || "N/A"}</Typography>
+          <Typography>Closing Balance: {selectedCustomer.closingBalance || 0}</Typography>
+          <Typography>Unit: {selectedCustomer.unitId ? "Assigned" : "Not Assigned"}</Typography>
         </CardContent>
       </Card>
     );
 
+  // Render invoice items table
+  const renderInvoiceItems = () => (
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="h6">Added Items</Typography>
+      {invoiceItems.length > 0 ? (
+        <TableContainer component={Paper}>
+          <Table>
+            <TableHead>
+              <TableRow>
+                <TableCell>Description</TableCell>
+                <TableCell>Amount</TableCell>
+                <TableCell>Quantity</TableCell>
+                <TableCell>Total</TableCell>
+                <TableCell>Actions</TableCell>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {invoiceItems.map((item, index) => (
+                <TableRow key={index}>
+                  <TableCell>{item.description}</TableCell>
+                  <TableCell>{item.amount.toFixed(2)}</TableCell>
+                  <TableCell>{item.quantity}</TableCell>
+                  <TableCell>{(item.amount * item.quantity).toFixed(2)}</TableCell>
+                  <TableCell>
+                    <IconButton onClick={() => handleRemoveItem(index)} color="error">
+                      <DeleteIcon />
+                    </IconButton>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      ) : (
+        <Typography>No items added yet. {selectedCustomer?.unitId ? "You can create an invoice without items for this customer." : "At least one item is required."}</Typography>
+      )}
+    </Box>
+  );
+
   return (
     <Box
       sx={{
-        minHeight: "100vh", // Full page height
-        width: "100%", // Full width
-        bgcolor: theme.palette.background.paper, // Uniform background
+        minHeight: "100vh",
+        width: "100%",
+       
         display: "flex",
         flexDirection: "column",
-        alignItems: "center", // Center content
-        justifyContent: "center", // Vertically center if needed
-        p: 0, // Remove default padding
+        alignItems: "center",
+        p: 0,
       }}
     >
+      {/* Generate Invoices for All Button */}
+      <Box sx={{ mb: 2, display: "flex", justifyContent: "flex-end", width: "100%", maxWidth: 600 }}>
+        <Button
+          variant="contained"
+          color="secondary"
+          onClick={handleGenerateAllClick}
+          disabled={loading}
+        >
+          {loading ? <CircularProgress size={24} /> : "Generate Invoices for All Customers"}
+        </Button>
+      </Box>
 
-          {/* Generate Invoices for All Button */}
-          <Box sx={{ mb: 2, display: "flex", justifyContent: "flex-end", ml:100 }}>
-          <Button
-            variant="contained"
-            color="secondary"
-            onClick={handleGenerateAllClick}
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={24} /> : "Generate Invoices for All Customers"}
-          </Button>
-        </Box>
       {/* Main Content */}
       <Box sx={{ maxWidth: 600, width: "100%" }}>
         <TitleComponent title="Create an Invoice" />
-
-    
 
         {/* Search Input */}
         {isPhoneSearch ? (
@@ -316,42 +414,63 @@ const CreateInvoice = () => {
         {/* Selected Customer */}
         {renderSelectedCustomer()}
 
-        {/* Invoice Form */}
-        <TextField
-          label="Description"
-          value={formData.description}
-          onChange={handleFormChange("description")}
-          fullWidth
-          margin="normal"
-        />
-        <TextField
-          label="Amount"
-          value={formData.amount}
-          onChange={handleFormChange("amount")}
-          fullWidth
-          margin="normal"
-          type="number"
-        />
-        <TextField
-          label="Quantity"
-          value={formData.quantity}
-          onChange={handleFormChange("quantity")}
-          fullWidth
-          margin="normal"
-          type="number"
-          inputProps={{ min: 0, step: 1 }}
-        />
+        {/* Invoice Items Form */}
+        {selectedCustomer && (
+          <Box sx={{ mt: 2 }}>
+            <Typography variant="h6">Add Invoice Item</Typography>
+            <TextField
+              label="Description"
+              value={newItem.description}
+              onChange={handleNewItemChange("description")}
+              fullWidth
+              margin="normal"
+            />
+            <TextField
+              label="Amount"
+              value={newItem.amount}
+              onChange={handleNewItemChange("amount")}
+              fullWidth
+              margin="normal"
+              type="number"
+              inputProps={{ min: 0, step: 0.01 }}
+            />
+            <TextField
+              label="Quantity"
+              value={newItem.quantity}
+              onChange={handleNewItemChange("quantity")}
+              fullWidth
+              margin="normal"
+              type="number"
+              inputProps={{ min: 1, step: 1 }}
+            />
+            <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 1 }}>
+              <Button
+                variant="outlined"
+                startIcon={<AddIcon />}
+                onClick={handleAddItem}
+              >
+                Add
+              </Button>
+            </Box>
 
-        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
-          <Button
-            variant="contained"
-            color="primary"
-            onClick={handleCreateInvoice}
-            disabled={loading}
-          >
-            {loading ? <CircularProgress size={24} /> : "Create Invoice"}
-          </Button>
-        </Box>
+            {/* Added Items */}
+            {renderInvoiceItems()}
+          </Box>
+        )}
+
+        {/* Create Invoice Button */}
+        {selectedCustomer && (
+          <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleCreateInvoice}
+              disabled={loading}
+            >
+              {loading ? <CircularProgress size={24} /> : "Create Invoice"}
+            </Button>
+          </Box>
+        )}
       </Box>
 
       {/* Generate Invoices for All Confirmation Dialog */}

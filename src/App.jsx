@@ -40,6 +40,12 @@ import EditOrganization from "./pages/editOrg";
 import AssignTaskScreen from "./pages/createTask";
 import FetchTasksScreen from "./pages/fetchTasks";
 import TaskDetailsScreen from "./pages/taskDetails";
+import BuildingsScreen from "./pages/property";
+import BuildingDetailsScreen from "./pages/propertyDetails";
+import CreatePropertyAndUnitsScreen from "./pages/addProperty";
+import CreateReadingScreen from "./pages/addutilities";
+import LandlordsScreen from "./pages/landlords";
+import TerminateLease from "./pages/terminateLease";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -95,6 +101,38 @@ const App = () => {
                   element={
                     <ProtectedRoute>
                       <CustomersScreen />
+                    </ProtectedRoute>
+                  }
+                />
+
+
+                  <Route
+                  path="/properties"
+                  element={
+                    <ProtectedRoute>
+                      <BuildingsScreen />
+                    </ProtectedRoute>
+                  }
+                /> 
+
+                   <Route
+                  path="/add-property"
+                  element={
+                    <ProtectedRoute>
+                      <CreatePropertyAndUnitsScreen />
+                    </ProtectedRoute>
+                  }
+                /> 
+
+
+
+
+
+                   <Route
+                  path="/building-details/:id"
+                  element={
+                    <ProtectedRoute>
+                      <BuildingDetailsScreen />
                     </ProtectedRoute>
                   }
                 />
@@ -162,6 +200,35 @@ const App = () => {
                     </ProtectedRoute>
                   }
                 />
+
+
+                     <Route
+                  path="/record-utility"
+                  element={
+                    <ProtectedRoute>
+                      <CreateReadingScreen />
+                    </ProtectedRoute>
+                  }
+                /> 
+
+
+                   <Route
+                  path="/landlords"
+                  element={
+                    <ProtectedRoute>
+                      <LandlordsScreen />
+                    </ProtectedRoute>
+                  }
+                /> 
+
+<Route
+                  path="/terminate-lease/:id"
+                  element={
+                    <ProtectedRoute>
+                      <TerminateLease />
+                    </ProtectedRoute>
+                  }
+                /> 
                 <Route
                   path="/receipts"
                   element={

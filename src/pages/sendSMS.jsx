@@ -1,35 +1,58 @@
-import React, { useState } from 'react';
-import { 
-  Tabs, Tab, Box, TextField, Button, Typography, Autocomplete, 
+import React, { useState, useEffect } from 'react';
+import {
+  Tabs, Tab, Box, TextField, Button, Typography, Autocomplete,
   MenuItem, Select, InputLabel, FormControl, Container, CircularProgress,
-  Snackbar,
-  Alert,
-  colors
+  Snackbar, Alert,
 } from '@mui/material';
 import { getTheme } from '../store/theme';
 import axios from 'axios';
 import TitleComponent from '../components/title';
-
-
+import { useAuthStore } from '../store/authStore';
 
 function SmsScreen() {
+  const { currentUser } = useAuthStore();
   const [tabValue, setTabValue] = useState(0);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [message, setMessage] = useState('');
-  const [selectedDay, setSelectedDay] = useState('');
+  const [landlordID, setLandlordID] = useState('');
+  const [buildingID, setBuildingID] = useState('');
+  const [landlords, setLandlords] = useState([]);
+  const [buildings, setBuildings] = useState([]);
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [loading, setLoading] = useState(false);
 
-
-  const daysOfWeek = ['MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY', 'SUNDAY'];
   const theme = getTheme();
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
+
+  // Fetch landlords and buildings
+  useEffect(() => {
+    const fetchData = async () => {
+      if (!currentUser) return;
+      setLoading(true);
+      try {
+        const [landlordsRes, buildingsRes] = await Promise.all([
+          axios.get(`${BASE_URL}/landlords`, { withCredentials: true }),
+          axios.get(`${BASE_URL}/buildings`, { params: { limit: 100 }, withCredentials: true }),
+        ]);
+        setLandlords(landlordsRes.data.landlords || []);
+        setBuildings(buildingsRes.data.buildings || []);
+      } catch (err) {
+        setSnackbar({ open: true, message: 'Failed to fetch landlords or buildings', severity: 'error' });
+      } finally {
+        setLoading(false);
+      }
+    };
+    fetchData();
+  }, [currentUser]);
+
   const resetFields = () => {
     setPhoneNumber('');
     setMessage('');
-    setSelectedDay('');
+    setLandlordID('');
+    setBuildingID('');
     setSearchQuery('');
     setSearchResults([]);
   };
@@ -51,14 +74,15 @@ function SmsScreen() {
   const fetchSearchResults = async () => {
     setIsSearching(true);
     try {
-      const { data } = await axios.get(`${BASEURL}/search-customer-by-name`, {
+      const { data } = await axios.get(`${BASE_URL}/search-customer-by-name`, {
         params: { name: searchQuery },
         withCredentials: true,
       });
-      setSearchResults(data.customers || data); // Assuming response is an array
+      setSearchResults(data.customers || data);
     } catch (error) {
-      console.error("Error fetching search results:", error);
+      console.error('Error fetching search results:', error);
       setSearchResults([]);
+      setSnackbar({ open: true, message: 'Failed to fetch customers', severity: 'error' });
     } finally {
       setIsSearching(false);
     }
@@ -69,90 +93,85 @@ function SmsScreen() {
       setSnackbar({ open: true, message: 'Please enter a message', severity: 'error' });
       return;
     }
-  
+
     let url, body;
     if (type === 'single' || type === 'new') {
       if (!phoneNumber) {
         setSnackbar({ open: true, message: 'Please enter a phone number', severity: 'error' });
         return;
       }
-      url = `${BASEURL}/send-sms`;
+      url = `${BASE_URL}/send-sms`;
       body = { mobile: phoneNumber, message };
     } else if (type === 'all') {
-      url = `${BASEURL}/send-to-all`;
+      url = `${BASE_URL}/send-to-all`;
       body = { message };
     } else if (type === 'group') {
-      if (!selectedDay) {
-        setSnackbar({ open: true, message: 'Please select a day', severity: 'error' });
+      if (!landlordID && !buildingID) {
+        setSnackbar({ open: true, message: 'Please select a landlord or building', severity: 'error' });
         return;
       }
-      url = `${BASEURL}/send-to-group`;
-      body = { day: selectedDay };
+      url = `${BASE_URL}/send-to-group`;
+      body = { message };
+      if (landlordID) body.landlordID = landlordID;
+      if (buildingID) body.buildingID = buildingID;
     }
-  
+
+    setLoading(true);
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(body),
-        credentials: 'include',
+      const response = await axios.post(url, body, {
+        withCredentials: true,
       });
-  
-      if (response.ok) {
-        setSnackbar({ open: true, message: `${type.charAt(0).toUpperCase() + type.slice(1)} SMS sent successfully!`, severity: 'success' });
-        resetFields();
-      } else {
-        throw new Error('Failed to send SMS');
-      }
+      setSnackbar({
+        open: true,
+        message: response.data.message || `${type.charAt(0).toUpperCase() + type.slice(1)} SMS sent successfully!`,
+        severity: 'success',
+      });
+      resetFields();
     } catch (error) {
       console.error('Error sending SMS:', error);
-      setSnackbar({ open: true, message: 'Failed to send SMS. Please try again.', severity: 'error' });
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.error || 'Failed to send SMS. Please try again.',
+        severity: 'error',
+      });
+    } finally {
+      setLoading(false);
     }
   };
-  
+
   return (
     <Container
       sx={{
- ml: { xs: 10, sm: 20 },
- width: '100%',
+        ml: { xs: 10, sm: 20 },
+        width: '100%',
       }}
     >
-       <Typography
-          variant="h4"
-          sx={{ color: theme.palette.primary.contrastText, mb: 2}} // Primary color for title
-        >
-          <TitleComponent title= "SMS Center"/>
-        </Typography>
-         
+      <Typography
+        variant="h4"
+        sx={{ color: theme.palette.primary.contrastText, mb: 2 }}
+      >
+        <TitleComponent title="SMS Center" />
+      </Typography>
+
       <Box
         sx={{
           maxWidth: '100%',
-          ml: { xs: 0, sm: 2 }, // Additional 16px left shift on small+ screens
+          ml: { xs: 0, sm: 2 },
           mt: 4,
           p: 3,
           borderRadius: 2,
-        
         }}
       >
-
-
-      
-       
-
         <Tabs
           value={tabValue}
           onChange={handleTabChange}
           centered
           sx={{
             mb: 3,
-            border: `1px solid ${theme.palette.primary.light}`, // Border color
-            
-         
-           // Medium grey for tabs
+            border: `1px solid ${theme.palette.primary.light}`,
             borderRadius: 2,
-           
-            '& .MuiTab-root': { color: theme.palette.primary.contrastText }, // Unselected tabs
-            '& .Mui-selected': { color: theme.palette.primary.contrastText , }, // Selected tab
+            '& .MuiTab-root': { color: theme.palette.primary.contrastText },
+            '& .Mui-selected': { color: theme.palette.primary.contrastText },
           }}
         >
           <Tab label="Single SMS" />
@@ -167,9 +186,9 @@ function SmsScreen() {
               <Autocomplete
                 freeSolo
                 options={searchResults}
-                getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.phoneNumber})`} // Display full name and phone
+                getOptionLabel={(option) => `${option.firstName} ${option.lastName} (${option.phoneNumber})`}
                 onInputChange={handleSearchChange}
-                onChange={(event, value) => setPhoneNumber(value ? value.phoneNumber : '')} // Set phoneNumber from selection
+                onChange={(event, value) => setPhoneNumber(value ? value.phoneNumber : '')}
                 loading={isSearching}
                 renderInput={(params) => (
                   <TextField
@@ -177,7 +196,7 @@ function SmsScreen() {
                     label="Search Customer by Name"
                     fullWidth
                     margin="normal"
-                    sx={{ bgcolor: theme.palette.primary.light[100]}} // Medium grey input
+                    sx={{ bgcolor: theme.palette.primary.light }}
                     InputProps={{
                       ...params.InputProps,
                       endAdornment: (
@@ -196,7 +215,7 @@ function SmsScreen() {
                 onChange={(e) => setPhoneNumber(e.target.value)}
                 fullWidth
                 margin="normal"
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+               
               />
               <TextField
                 label="Message"
@@ -206,15 +225,15 @@ function SmsScreen() {
                 multiline
                 rows={4}
                 margin="normal"
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+              
               />
               <Button
                 variant="contained"
-                color="primary"
                 onClick={() => handleSend('single')}
-                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }} // Primary button
+                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
+                disabled={loading}
               >
-                Send SMS
+                {loading ? <CircularProgress size={24} /> : 'Send SMS'}
               </Button>
             </>
           )}
@@ -227,7 +246,7 @@ function SmsScreen() {
                 fullWidth
                 margin="normal"
                 required
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+              
               />
               <TextField
                 label="Message"
@@ -238,15 +257,15 @@ function SmsScreen() {
                 rows={4}
                 margin="normal"
                 required
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+              
               />
               <Button
                 variant="contained"
-                color="primary"
                 onClick={() => handleSend('new')}
-                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }} // Primary button
+                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
+                disabled={loading}
               >
-                Send SMS
+                {loading ? <CircularProgress size={24} /> : 'Send SMS'}
               </Button>
             </>
           )}
@@ -260,32 +279,53 @@ function SmsScreen() {
                 multiline
                 rows={4}
                 margin="normal"
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+                sx={{ bgcolor: theme.palette.primary.light }}
               />
               <Button
                 variant="contained"
-                color="greenAccent"
                 onClick={() => handleSend('all')}
-                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }} // Green accent button
+                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
+                disabled={loading}
               >
-                Send to All
+                {loading ? <CircularProgress size={24} /> : 'Send to All'}
               </Button>
             </>
           )}
           {tabValue === 3 && (
             <>
               <FormControl fullWidth margin="normal">
-                <InputLabel sx={{ color: theme.palette.primary.main }}>
-                  Select Service Day
+                <InputLabel >
+                  Select Landlord (Optional)
                 </InputLabel>
                 <Select
-                  value={selectedDay}
-                  onChange={(e) => setSelectedDay(e.target.value)}
-                  label="Select Service Day"
-                  sx={{ bgcolor: theme.palette.grey[300] }} // Medium grey input
+                  value={landlordID}
+                  onChange={(e) => setLandlordID(e.target.value)}
+                  label="Select Landlord (Optional)"
+                  
                 >
-                  {daysOfWeek.map((day) => (
-                    <MenuItem key={day} value={day}>{day}</MenuItem>
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {landlords.map((landlord) => (
+                    <MenuItem key={landlord.id} value={landlord.id}>
+                      {landlord.name || `${landlord.firstName} ${landlord.lastName}`}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+              <FormControl fullWidth margin="normal">
+                <InputLabel >
+                  Select Building (Optional)
+                </InputLabel>
+                <Select
+                  value={buildingID}
+                  onChange={(e) => setBuildingID(e.target.value)}
+                  label="Select Building (Optional)"
+                 
+                >
+                  <MenuItem value=""><em>None</em></MenuItem>
+                  {buildings.map((building) => (
+                    <MenuItem key={building.id} value={building.id}>
+                      {building.buildingName}
+                    </MenuItem>
                   ))}
                 </Select>
               </FormControl>
@@ -297,29 +337,35 @@ function SmsScreen() {
                 multiline
                 rows={4}
                 margin="normal"
-                sx={{ bgcolor: theme.palette.primary.light[100] }} // Medium grey input
+                
               />
               <Button
                 variant="contained"
-                color="greenAccent"
                 onClick={() => handleSend('group')}
-                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }} // Green accent button
+                sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
+                disabled={loading || (!landlordID && !buildingID)}
               >
-                Send to Group
+                {loading ? <CircularProgress size={24} /> : 'Send to Group'}
               </Button>
             </>
           )}
         </Box>
       </Box>
 
-      <Snackbar open={snackbar.open} autoHideDuration={4000} onClose={() => setSnackbar({ ...snackbar, open: false })}>
-        <Alert onClose={() => setSnackbar({ ...snackbar, open: false })} severity={snackbar.severity} sx={{ width: '100%' }}>
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
           {snackbar.message}
         </Alert>
       </Snackbar>
     </Container>
-
-
   );
 }
 

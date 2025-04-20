@@ -35,7 +35,7 @@ export default function InvoiceList() {
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const BASEURL = import.meta.env.VITE_BASE_URL
   const theme = getTheme();
 
   // Fetch all invoices
@@ -50,8 +50,6 @@ export default function InvoiceList() {
       const { invoices: fetchedInvoices, total } = res.data;
       setInvoices(fetchedInvoices || []);
       setRowCount(total || 0);
-
-      //console.log(`invoices ${JSON.stringify(invoices)}`);
     } catch (error) {
       console.error("Error fetching all invoices:", error);
       setInvoices([]);
@@ -62,83 +60,76 @@ export default function InvoiceList() {
     }
   };
 
-
-// ... other imports and code remain the same ...
-
-// Fetch invoices by phone number
-const fetchInvoicesByPhone = async (page, pageSize, query) => {
-  setLoading(true);
-  setErrorMessage("");
-  try {
-    const res = await axios.get(`${BASEURL}/invoices/search-by-phone`, {
-      params: {
-        phone: query,
-        page: page + 1,
-        limit: pageSize,
-      },
-      withCredentials: true,
-    });
-    const { invoices: fetchedInvoices, total } = res.data;
-    setInvoices(fetchedInvoices || []);
-    setRowCount(total || 0);
-  } catch (error) {
-    console.error("Error fetching invoices by phone:", error);
-    setInvoices([]);
-    setRowCount(0);
-    setErrorMessage(error.response?.data?.error || "Failed to search invoices by phone");
-  } finally {
-    setLoading(false);
-  }
-};
-
-// Fetch invoices by name
-const fetchInvoicesByName = async (page, pageSize, query) => {
-  setLoading(true);
-  setErrorMessage("");
-  try {
-    const [firstName, ...lastNameParts] = query.trim().split(" ");
-    const lastName = lastNameParts.length > 0 ? lastNameParts.join(" ") : undefined;
-    const res = await axios.get(`${BASEURL}/invoices/search-by-name`, {
-      params: {
-        firstName,
-        lastName,
-        page: page + 1,
-        limit: pageSize,
-      },
-      withCredentials: true,
-    });
-    const { invoices: fetchedInvoices, total } = res.data;
-    setInvoices(fetchedInvoices || []);
-    setRowCount(total || 0);
-  } catch (error) {
-    console.error("Error fetching invoices by name:", error);
-    setInvoices([]);
-    setRowCount(0);
-    setErrorMessage(error.response?.data?.error || "Failed to search invoices by name");
-  } finally {
-    setLoading(false);
-  }
-};
-
-// Updated handleSearch
-const handleSearch = () => {
-  setPaginationModel((prev) => ({ ...prev, page: 0 }));
-  const trimmedQuery = searchQuery.trim();
-  if (trimmedQuery === "") {
-    fetchAllInvoices(0, paginationModel.pageSize);
-  } else {
-    const isPhoneNumber = /^\d+$/.test(trimmedQuery);
-    if (isPhoneNumber) {
-      fetchInvoicesByPhone(0, paginationModel.pageSize, trimmedQuery);
-    } else {
-      fetchInvoicesByName(0, paginationModel.pageSize, trimmedQuery);
+  // Fetch invoices by phone number
+  const fetchInvoicesByPhone = async (page, pageSize, query) => {
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const res = await axios.get(`${BASEURL}/invoices/search-by-phone`, {
+        params: {
+          phone: query,
+          page: page + 1,
+          limit: pageSize,
+        },
+        withCredentials: true,
+      });
+      const { invoices: fetchedInvoices, total } = res.data;
+      setInvoices(fetchedInvoices || []);
+      setRowCount(total || 0);
+    } catch (error) {
+      console.error("Error fetching invoices by phone:", error);
+      setInvoices([]);
+      setRowCount(0);
+      setErrorMessage(error.response?.data?.error || "Failed to search invoices by phone");
+    } finally {
+      setLoading(false);
     }
-  }
-};
+  };
 
-// ... rest of the component remains the same ...
+  // Fetch invoices by name
+  const fetchInvoicesByName = async (page, pageSize, query) => {
+    setLoading(true);
+    setErrorMessage("");
+    try {
+      const [firstName, ...lastNameParts] = query.trim().split(" ");
+      const lastName = lastNameParts.length > 0 ? lastNameParts.join(" ") : undefined;
+      const res = await axios.get(`${BASEURL}/invoices/search-by-name`, {
+        params: {
+          firstName,
+          lastName,
+          page: page + 1,
+          limit: pageSize,
+        },
+        withCredentials: true,
+      });
+      const { invoices: fetchedInvoices, total } = res.data;
+      setInvoices(fetchedInvoices || []);
+      setRowCount(total || 0);
+    } catch (error) {
+      console.error("Error fetching invoices by name:", error);
+      setInvoices([]);
+      setRowCount(0);
+      setErrorMessage(error.response?.data?.error || "Failed to search invoices by name");
+    } finally {
+      setLoading(false);
+    }
+  };
 
-
+  // Handle search
+  const handleSearch = () => {
+    setPaginationModel((prev) => ({ ...prev, page: 0 }));
+    const trimmedQuery = searchQuery.trim();
+    if (trimmedQuery === "") {
+      fetchAllInvoices(0, paginationModel.pageSize);
+    } else {
+      const isPhoneNumber = /^\d+$/.test(trimmedQuery);
+      if (isPhoneNumber) {
+        fetchInvoicesByPhone(0, paginationModel.pageSize, trimmedQuery);
+      } else {
+        fetchInvoicesByName(0, paginationModel.pageSize, trimmedQuery);
+      }
+    }
+  };
 
   // Initial fetch and pagination updates
   useEffect(() => {
@@ -156,17 +147,23 @@ const handleSearch = () => {
     id: invoice.id || Math.random().toString(),
     invoiceNumber: invoice.invoiceNumber,
     invoiceAmount: invoice.invoiceAmount,
+    amountPaid: invoice.amountPaid || 0, // New field
     closingBalance: invoice.closingBalance,
     invoicePeriod: invoice.invoicePeriod,
     status: invoice.status,
     isSystemGenerated: invoice.isSystemGenerated,
+    createdBy: invoice.createdBy || "N/A", // New field
     customerId: invoice.customer?.id || "N/A",
     firstName: invoice.customer?.firstName?.trim() || "Unknown",
     lastName: invoice.customer?.lastName?.trim() || "Unknown",
     phoneNumber: invoice.customer?.phoneNumber?.trim() || "N/A",
+    unitNumber: invoice.unit?.unitNumber || "N/A", // New relation
     itemDescriptions: invoice.items?.length
-      ? invoice.items.map((item) => item.description).join(", ")
+      ? invoice.items.map((item) => `${item.description} (Qty: ${item.quantity}, Amount: ${item.amount})`).join(", ")
       : "N/A",
+    paymentSummary: invoice.payments?.length
+      ? invoice.payments.map((p) => `${p.amount} (${p.modeOfPayment})`).join(", ")
+      : "No Payments", // New relation
     createdAt: invoice.createdAt,
   }));
 
@@ -190,27 +187,25 @@ const handleSearch = () => {
     { field: "lastName", headerName: "Last Name", width: 150 },
     { field: "phoneNumber", headerName: "Phone Number", width: 180 },
     { field: "invoiceAmount", headerName: "Invoice Amount", width: 150 },
+    { field: "amountPaid", headerName: "Amount Paid", width: 150 }, // New column
     { field: "closingBalance", headerName: "Closing Balance", width: 150 },
-
+    { field: "unitNumber", headerName: "Unit", width: 120 }, // New column
+    { field: "createdBy", headerName: "Created By", width: 150 }, // New column
     {
       field: "createdAt",
       headerName: "Date",
       width: 200,
       renderCell: (params) => {
         if (!params?.value) return "N/A";
-    
         try {
           const date = new Date(params.value);
           date.setHours(date.getHours() - 1); // Subtract 1 hour to correct time
-    
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = date.toLocaleString('default', { month: 'short' });
+          const day = String(date.getDate()).padStart(2, "0");
+          const month = date.toLocaleString("default", { month: "short" });
           const year = date.getFullYear();
-    
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          const seconds = String(date.getSeconds()).padStart(2, '0');
-    
+          const hours = String(date.getHours()).padStart(2, "0");
+          const minutes = String(date.getMinutes()).padStart(2, "0");
+          const seconds = String(date.getSeconds()).padStart(2, "0");
           return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
         } catch (error) {
           console.error("Invalid Date:", params.value);
@@ -218,14 +213,19 @@ const handleSearch = () => {
         }
       },
     },
-    { field: "invoicePeriod", headerName: "Period", width: 150 },
+    {
+      field: "invoicePeriod",
+      headerName: "Period",
+      width: 150,
+      renderCell: (params) =>
+        params.value
+          ? new Date(params.value).toLocaleString("default", { year: "numeric", month: "short" })
+          : "N/A",
+    },
     { field: "status", headerName: "Status", width: 120 },
-    { field: "isSystemGenerated", headerName: "System Generated", width: 180 },
-    { field: "itemDescriptions", headerName: "Description", width: 250 },
-
-    
-    
-    
+    { field: "isSystemGenerated", headerName: "System Generated", width: 180, renderCell: (params) => (params.value ? "Yes" : "No") },
+    { field: "itemDescriptions", headerName: "Items", width: 300 },
+    { field: "paymentSummary", headerName: "Payments", width: 250 }, // New column
   ];
 
   const handleRowClick = (params) => {
@@ -262,8 +262,6 @@ const handleSearch = () => {
     setSearchQuery(e.target.value);
   };
 
-
-
   const handleKeyPress = (e) => {
     if (e.key === "Enter") {
       handleSearch();
@@ -274,11 +272,7 @@ const handleSearch = () => {
   const currentPage = paginationModel.page + 1;
 
   return (
-  
-<Box sx={{  p:3,bgcolor: theme.palette.primary.main, height: "100vh"}}>
-
-
-
+    <Box sx={{ p: 3, bgcolor: theme.palette.primary.main, height: "100vh" }}>
       <IconButton
         onClick={handleBack}
         sx={{
@@ -462,6 +456,9 @@ const handleSearch = () => {
                   Phone: {selectedCustomer.phoneNumber}
                 </Typography>
                 <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
+                  Unit: {selectedCustomer.unitNumber}
+                </Typography>
+                <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
                   Invoices:
                 </Typography>
                 <ul>
@@ -476,7 +473,7 @@ const handleSearch = () => {
                         >
                           <VisibilityIcon />
                         </IconButton>
-                        Invoice #{inv.invoiceNumber.substring(0, 9)} - Amount: ${inv.invoiceAmount} - Date:{" "}
+                        Invoice #{inv.invoiceNumber.substring(0, 9)} - Amount: ${inv.invoiceAmount} - Paid: ${inv.amountPaid} - Date:{" "}
                         {new Date(inv.createdAt).toLocaleDateString()}
                       </li>
                     ))}
@@ -490,10 +487,6 @@ const handleSearch = () => {
           </Paper>
         </Grid>
       )}
-  
-
-  </Box>
-  
-
+    </Box>
   );
 }
