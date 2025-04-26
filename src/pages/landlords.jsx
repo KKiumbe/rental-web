@@ -24,9 +24,12 @@ import {
   Grid,
   Snackbar,
   CircularProgress,
-  styled,
+  IconButton,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import EditIcon from '@mui/icons-material/Edit';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import CloseIcon from '@mui/icons-material/Close';
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
 import { useAuthStore } from '../store/authStore';
@@ -37,6 +40,10 @@ class ErrorBoundary extends Component {
 
   static getDerivedStateFromError(error) {
     return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('ErrorBoundary caught an error:', error, errorInfo);
   }
 
   render() {
@@ -60,6 +67,8 @@ export default function LandlordsScreen() {
   const [landlords, setLandlords] = useState([]);
   const [loading, setLoading] = useState(false);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [dialogMode, setDialogMode] = useState('add'); // 'add' or 'edit'
+  const [selectedLandlord, setSelectedLandlord] = useState(null); // For editing
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -85,6 +94,7 @@ export default function LandlordsScreen() {
       const response = await axios.get(`${BASE_URL}/landlords`, {
         withCredentials: true,
       });
+      console.log('Fetched landlords:', response.data.landlords);
       setLandlords(response.data.landlords || []);
     } catch (error) {
       console.error('Error fetching landlords:', error);
@@ -126,7 +136,7 @@ export default function LandlordsScreen() {
     return newErrors;
   };
 
-  // Handle form submission
+  // Handle form submission (Add or Edit)
   const handleSubmit = async (e) => {
     e.preventDefault();
     setErrors({});
@@ -154,27 +164,59 @@ export default function LandlordsScreen() {
 
     setLoading(true);
     try {
-      const response = await axios.post(`${BASE_URL}/landlords`, payload, {
-        withCredentials: true,
-      });
-      setLandlords((prev) => [...prev, response.data.landlord]);
-      setSnackbarMessage(response.data.message || 'Landlord added successfully');
-      setSnackbarOpen(true);
-      setDialogOpen(false);
-      setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
+      let response;
+      if (dialogMode === 'add') {
+        // Add new landlord
+        response = await axios.post(`${BASE_URL}/landlord`, payload, {
+          withCredentials: true,
+        });
+      } else {
+        // Edit existing landlord
+        response = await axios.put(`${BASE_URL}/landlord/${selectedLandlord.id}`, payload, {
+          withCredentials: true,
+        });
+      }
+
+      if (response.status === 200) {
+        console.log(`${dialogMode === 'add' ? 'Landlord created' : 'Landlord updated'} successfully, closing dialog...`);
+        if (dialogMode === 'add') {
+          setLandlords((prev) => [...prev, response.data.landlord]);
+          setSnackbarMessage(response.data.message || 'Landlord added successfully');
+        } else {
+          setLandlords((prev) =>
+            prev.map((landlord) =>
+              landlord.id === selectedLandlord.id ? { ...landlord, ...payload } : landlord
+            )
+          );
+          setSnackbarMessage(response.data.message || 'Landlord updated successfully');
+        }
+        setDialogOpen(false);
+        setSnackbarOpen(true);
+        setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
+        setDialogMode('add');
+        setSelectedLandlord(null);
+      } else {
+        console.log('Unexpected response status:', response.status);
+        setSnackbarMessage('Unexpected response status: ' + response.status);
+        setSnackbarOpen(true);
+      }
     } catch (err) {
-      console.error('Error adding landlord:', err);
+      console.error(`Error ${dialogMode === 'add' ? 'adding' : 'updating'} landlord:`, err);
       if (err.response) {
         const { status, data } = err.response;
         if (status === 400) {
+          setErrors({ server: data?.message || 'Invalid input. Please check your details.' });
           setSnackbarMessage(data?.message || 'Invalid input. Please check your details.');
         } else if (status === 401) {
           setSnackbarMessage('Unauthorized. Redirecting to login...');
+          setDialogOpen(false);
           setTimeout(() => navigate('/login'), 2000);
         } else {
+          setErrors({ server: 'Something went wrong. Please try again later.' });
           setSnackbarMessage('Something went wrong. Please try again later.');
         }
       } else {
+        setErrors({ server: 'Network error. Please check your connection.' });
         setSnackbarMessage('Network error. Please check your connection.');
       }
       setSnackbarOpen(true);
@@ -183,17 +225,66 @@ export default function LandlordsScreen() {
     }
   };
 
-  // Open/close dialog
-  const handleOpenDialog = () => setDialogOpen(true);
+  // Open dialog for adding
+  const handleOpenDialog = () => {
+    setDialogMode('add');
+    setSelectedLandlord(null);
+    setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
+    setDialogOpen(true);
+  };
+
+  // Open dialog for editing
+  const handleEditLandlord = (landlord) => {
+    setDialogMode('edit');
+    setSelectedLandlord(landlord);
+    setFormData({
+      firstName: landlord.firstName,
+      lastName: landlord.lastName,
+      email: landlord.email || '',
+      phoneNumber: landlord.phoneNumber,
+      status: landlord.status,
+    });
+    setDialogOpen(true);
+  };
+
+  // Close dialog
   const handleCloseDialog = () => {
+    console.log('Closing dialog manually...');
     setDialogOpen(false);
     setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
     setErrors({});
+    setDialogMode('add');
+    setSelectedLandlord(null);
   };
 
-  // Render add landlord form
-  const renderAddLandlordForm = () => (
+  // Navigate to landlord details
+  const handleViewLandlord = (id) => {
+    navigate(`/landlord/${id}`);
+  };
+
+  // Format date safely
+  const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return 'Invalid Date';
+    return date.toLocaleString('en-US', {
+      year: 'numeric',
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: 'numeric',
+      hour12: true,
+    });
+  };
+
+  // Render add/edit landlord form
+  const renderLandlordForm = () => (
     <form onSubmit={handleSubmit}>
+      {errors.server && (
+        <Typography color="error" sx={{ mb: 2 }}>
+          {errors.server}
+        </Typography>
+      )}
       <Grid container spacing={2}>
         <Grid item xs={6}>
           <TextField
@@ -206,6 +297,7 @@ export default function LandlordsScreen() {
             helperText={errors.firstName}
             variant="outlined"
             size="small"
+            disabled={loading}
           />
         </Grid>
         <Grid item xs={6}>
@@ -219,6 +311,7 @@ export default function LandlordsScreen() {
             helperText={errors.lastName}
             variant="outlined"
             size="small"
+            disabled={loading}
           />
         </Grid>
         <Grid item xs={12}>
@@ -232,6 +325,7 @@ export default function LandlordsScreen() {
             helperText={errors.email}
             variant="outlined"
             size="small"
+            disabled={loading}
           />
         </Grid>
         <Grid item xs={12}>
@@ -245,10 +339,11 @@ export default function LandlordsScreen() {
             helperText={errors.phoneNumber}
             variant="outlined"
             size="small"
+            disabled={loading}
           />
         </Grid>
         <Grid item xs={12}>
-          <FormControl fullWidth variant="outlined" size="small" error={!!errors.status}>
+          <FormControl fullWidth variant="outlined" size="small" error={!!errors.status} disabled={loading}>
             <InputLabel>Status</InputLabel>
             <Select
               name="status"
@@ -277,7 +372,7 @@ export default function LandlordsScreen() {
       </Typography>
 
       <ErrorBoundary>
-        <Paper sx={{ width: '80%', maxWidth: 900, p: 4, mx: 'auto', mt: 5 }}>
+        <Paper sx={{  p: 4, mx: 'auto', mt: 5,ml:5 }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
             <Typography variant="h6">All Landlords</Typography>
             <Button
@@ -303,27 +398,51 @@ export default function LandlordsScreen() {
               <Table>
                 <TableHead>
                   <TableRow>
+                    <TableCell>View</TableCell>
+                    <TableCell>Edit</TableCell>
                     <TableCell>First Name</TableCell>
                     <TableCell>Last Name</TableCell>
                     <TableCell>Email</TableCell>
                     <TableCell>Phone Number</TableCell>
                     <TableCell>Status</TableCell>
                     <TableCell>Created At</TableCell>
+                   
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {landlords.map((landlord) => (
-                    <TableRow key={landlord.id}>
-                      <TableCell>{landlord.firstName}</TableCell>
-                      <TableCell>{landlord.lastName}</TableCell>
-                      <TableCell>{landlord.email || 'N/A'}</TableCell>
-                      <TableCell>{landlord.phoneNumber}</TableCell>
-                      <TableCell>{landlord.status}</TableCell>
-                      <TableCell>
-                        {new Date(landlord.createdAt).toLocaleDateString()}
-                      </TableCell>
-                    </TableRow>
-                  ))}
+                  {landlords.map((landlord) => {
+                    console.log('Landlord createdAt:', landlord.createdAt);
+                    return (
+                      <TableRow key={landlord.id}>
+
+                         <TableCell>
+                         
+
+                            <IconButton onClick={() => handleViewLandlord(landlord.id)} title="View">
+                            <VisibilityIcon color="info" />
+                          </IconButton>
+                        
+                        
+                        </TableCell>
+
+                        <TableCell>
+                        <IconButton onClick={() => handleEditLandlord(landlord)} title="Edit">
+                            <EditIcon color="primary" />
+                            </IconButton>
+
+
+                        </TableCell>
+
+                        <TableCell>{landlord.firstName}</TableCell>
+                        <TableCell>{landlord.lastName}</TableCell>
+                        <TableCell>{landlord.email || 'N/A'}</TableCell>
+                        <TableCell>{landlord.phoneNumber}</TableCell>
+                        <TableCell>{landlord.status}</TableCell>
+                        <TableCell>{formatDate(landlord.createdAt)}</TableCell>
+                       
+                      </TableRow>
+                    );
+                  })}
                 </TableBody>
               </Table>
             </TableContainer>
@@ -331,16 +450,32 @@ export default function LandlordsScreen() {
         </Paper>
       </ErrorBoundary>
 
-      {/* Add Landlord Dialog */}
+      {/* Add/Edit Landlord Dialog */}
       <Dialog open={dialogOpen} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>Add New Landlord</DialogTitle>
+        <DialogTitle>
+          {dialogMode === 'add' ? 'Add New Landlord' : 'Edit Landlord'}
+          <CloseIcon
+            onClick={handleCloseDialog}
+            sx={{
+              position: 'absolute',
+              right: 8,
+              top: 8,
+              color: theme?.palette?.grey[500],
+              cursor: 'pointer',
+              '&:hover': {
+                color: theme?.palette?.grey[700],
+              },
+            }}
+          />
+        </DialogTitle>
         <DialogContent>
-          {renderAddLandlordForm()}
+          {renderLandlordForm()}
         </DialogContent>
         <DialogActions>
           <Button
             onClick={handleCloseDialog}
             sx={{ color: theme?.palette?.grey[300] }}
+            disabled={loading}
           >
             Cancel
           </Button>
@@ -350,7 +485,7 @@ export default function LandlordsScreen() {
             disabled={loading}
             sx={{ backgroundColor: theme?.palette?.greenAccent?.main, color: '#fff' }}
           >
-            {loading ? 'Adding...' : 'Add Landlord'}
+            {loading ? <CircularProgress size={24} /> : dialogMode === 'add' ? 'Add Landlord' : 'Update Landlord'}
           </Button>
         </DialogActions>
       </Dialog>

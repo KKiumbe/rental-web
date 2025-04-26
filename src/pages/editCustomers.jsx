@@ -11,8 +11,6 @@ import {
   Snackbar,
   Alert,
   Paper,
-  FormControlLabel,
-  Checkbox,
 } from '@mui/material';
 import axios from 'axios';
 import { getTheme } from '../store/theme';
@@ -21,9 +19,8 @@ import TitleComponent from '../components/title';
 const CustomerEditScreen = () => {
   const { id } = useParams();
   const navigate = useNavigate();
-
-const theme = getTheme();
-const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const theme = getTheme();
+  const BASEURL = import.meta.env.VITE_BASE_URL || 'https://taqa.co.ke/api';
   const [loading, setLoading] = useState(true);
   const [originalData, setOriginalData] = useState(null);
   const [customerData, setCustomerData] = useState({
@@ -31,19 +28,10 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
     lastName: '',
     email: '',
     phoneNumber: '',
-    gender: '',
-    county: '',
-    town: '',
-    status: '', // Will be normalized to "ACTIVE" or "INACTIVE"
-    location: '',
-    estateName: '',
-    building: '',
-    houseNumber: '',
-    category: '',
-    monthlyCharge: '', // Will be converted to float
-    garbageCollectionDay: '',
-    collected: false, // Boolean with default false
-    closingBalance: '', // Will be converted to float
+    secondaryPhoneNumber: '',
+    nationalId: '',
+    status: '',
+    closingBalance: '',
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
@@ -51,60 +39,99 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
     severity: 'success',
   });
 
-  // Fetch customer data on mount and normalize values
+  // Format number with commas only for numbers >= 1000
+  const formatNumberWithCommas = (number) => {
+    if (!number && number !== 0) return '';
+    
+    const num = Number(number);
+  
+    if (isNaN(num)) return ''; // Safeguard in case input is not a number
+  
+    // Format with commas, no decimals
+    return num.toLocaleString('en-US', {
+      maximumFractionDigits: 0, // no decimals
+      minimumFractionDigits: 0
+    });
+  };
+  
+
+  // Remove commas and non-numeric characters for state and backend
+  const cleanNumberInput = (value) => {
+    if (!value) return '';
+    // Remove all non-numeric characters except decimal point and minus sign
+    const cleaned = value.replace(/[^0-9.-]/g, '');
+    // Ensure only one decimal point and valid number format
+    const parts = cleaned.split('.');
+    if (parts.length > 2) return parts[0] + '.' + parts[1];
+    return cleaned;
+  };
+
+  // Fetch customer data on mount
   useEffect(() => {
-    const fetchCustomer = async () => {
+    const fetchData = async () => {
       try {
-        const response = await axios.get(`${BASEURL}/customer-details/${id}`, {
+        const customerResponse = await axios.get(`${BASEURL}/customer-details/${id}`, {
           withCredentials: true,
         });
-        const fetchedData = response.data;
+        const fetchedData = customerResponse.data;
 
         // Normalize data
         const normalizedData = {
-          ...fetchedData,
-          gender: fetchedData.gender === null ? '' : fetchedData.gender,
-          status: fetchedData.status || '', // Keep as-is from API ("ACTIVE" or "INACTIVE")
-          collected: fetchedData.collected ?? false, // Default to false if null/undefined
-          monthlyCharge: fetchedData.monthlyCharge !== null && fetchedData.monthlyCharge !== undefined ? fetchedData.monthlyCharge.toString() : '', // Convert float to string for TextField
-          closingBalance: fetchedData.closingBalance !== null && fetchedData.closingBalance !== undefined ? fetchedData.closingBalance.toString() : '', // Convert float to string for TextField
+          firstName: fetchedData.firstName || '',
+          lastName: fetchedData.lastName || '',
+          email: fetchedData.email || '',
+          phoneNumber: fetchedData.phoneNumber || '',
+          secondaryPhoneNumber: fetchedData.secondaryPhoneNumber || '',
+          nationalId: fetchedData.nationalId || '',
+          status: fetchedData.status || '',
+          closingBalance:
+            fetchedData.closingBalance !== null && fetchedData.closingBalance !== undefined
+              ? fetchedData.closingBalance.toString()
+              : '',
         };
 
         setCustomerData(normalizedData);
         setOriginalData(normalizedData);
         setLoading(false);
       } catch (error) {
+        console.error('Error fetching data:', error);
         setSnackbar({
           open: true,
-          message: 'Error fetching customer data',
+          message: 'Error fetching data: ' + error.message,
           severity: 'error',
         });
         setLoading(false);
       }
     };
-    fetchCustomer();
+    fetchData();
   }, [id, BASEURL]);
 
   // Handle input changes
   const handleChange = (e) => {
-    const { name, value, type, checked } = e.target;
-    setCustomerData((prev) => ({
-      ...prev,
-      [name]: type === 'checkbox' ? checked : value,
-    }));
+    const { name, value } = e.target;
+    if (name === 'closingBalance') {
+      const cleanedValue = cleanNumberInput(value);
+      setCustomerData((prev) => ({
+        ...prev,
+        [name]: cleanedValue,
+      }));
+    } else {
+      setCustomerData((prev) => ({
+        ...prev,
+        [name]: value,
+      }));
+    }
   };
 
-  // Get changed fields and convert types as needed
+  // Get changed fields and convert types
   const getChangedFields = () => {
     const changedFields = {};
     for (const key in customerData) {
       if (customerData[key] !== originalData[key]) {
-        if (key === 'monthlyCharge' || key === 'closingBalance') {
-          changedFields[key] = customerData[key] ? parseFloat(customerData[key]) : null; // Convert to float
-        } else if (key === 'collected') {
-          changedFields[key] = customerData[key]; // Boolean as-is
+        if (key === 'closingBalance') {
+          changedFields[key] = customerData[key] ? parseFloat(customerData[key]) : null;
         } else {
-          changedFields[key] = customerData[key]; // Other fields as strings
+          changedFields[key] = customerData[key];
         }
       }
     }
@@ -139,10 +166,11 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
         navigate('/customers');
       }, 2000);
     } catch (error) {
+      console.error('Error updating customer:', error);
       setLoading(false);
       setSnackbar({
         open: true,
-        message: 'Error updating customer: ' + error.message,
+        message: 'Error updating customer: ' + (error.response?.data?.message || error.message),
         severity: 'error',
       });
     }
@@ -164,11 +192,10 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
   }
 
   return (
-    <Container sx={{ maxWidth: 900, minWidth: 600 }}>
-      <Paper elevation={3} sx={{ p: 4, mt: 4, ml: 50, minWidth: 800 }}>
+    <Container sx={{ maxWidth: 900, minWidth: 600, ml: 10 }}>
+      <Paper elevation={3} sx={{ p: 4, mt: 4, minWidth: 800 }}>
         <Typography variant="h4" gutterBottom>
-        <TitleComponent title={`Edit ${customerData?.firstName}'s Details `} />
-
+          <TitleComponent title={`Edit ${customerData?.firstName}'s Details`} />
         </Typography>
         <form onSubmit={handleSubmit}>
           <Box sx={{ display: 'grid', gap: 2, gridTemplateColumns: 'repeat(2, 1fr)' }}>
@@ -205,29 +232,16 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
               fullWidth
             />
             <TextField
-              select
-              label="Gender"
-              name="gender"
-              value={customerData.gender || ''}
-              onChange={handleChange}
-              fullWidth
-            >
-              <MenuItem value="">Not Specified</MenuItem>
-              <MenuItem value="Male">Male</MenuItem>
-              <MenuItem value="Female">Female</MenuItem>
-              <MenuItem value="Other">Other</MenuItem>
-            </TextField>
-            <TextField
-              label="County"
-              name="county"
-              value={customerData.county}
+              label="Secondary Phone Number"
+              name="secondaryPhoneNumber"
+              value={customerData.secondaryPhoneNumber}
               onChange={handleChange}
               fullWidth
             />
             <TextField
-              label="Town"
-              name="town"
-              value={customerData.town}
+              label="National ID"
+              name="nationalId"
+              value={customerData.nationalId}
               onChange={handleChange}
               fullWidth
             />
@@ -241,79 +255,17 @@ const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
             >
               <MenuItem value="ACTIVE">Active</MenuItem>
               <MenuItem value="INACTIVE">Inactive</MenuItem>
+              <MenuItem value="PENDING">Pending</MenuItem>
             </TextField>
-            <TextField
-              label="Location"
-              name="location"
-              value={customerData.location}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              label="Estate Name"
-              name="estateName"
-              value={customerData.estateName}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              label="Building"
-              name="building"
-              value={customerData.building}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              label="House Number"
-              name="houseNumber"
-              value={customerData.houseNumber}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              label="Category"
-              name="category"
-              value={customerData.category}
-              onChange={handleChange}
-              fullWidth
-            />
-            <TextField
-              label="Monthly Charge"
-              name="monthlyCharge"
-              type="number"
-              step="0.01" // Allow decimal input
-              value={customerData.monthlyCharge}
-              onChange={handleChange}
-              required
-              fullWidth
-            />
-            <TextField
-              label="Garbage Collection Day"
-              name="garbageCollectionDay"
-              value={customerData.garbageCollectionDay}
-              onChange={handleChange}
-              required
-              fullWidth
-            />
-            <FormControlLabel
-              control={
-                <Checkbox
-                  name="collected"
-                  checked={customerData.collected}
-                  onChange={handleChange}
-                />
-              }
-              label="Collected"
-            />
             <TextField
               label="Closing Balance"
               name="closingBalance"
-              type="number"
-              step="0.01" // Allow decimal input
-              value={customerData.closingBalance}
+              type="text"
+              value={formatNumberWithCommas(customerData.closingBalance)}
               onChange={handleChange}
-              required
               fullWidth
+              
+            
             />
           </Box>
           <Box sx={{ mt: 3 }}>

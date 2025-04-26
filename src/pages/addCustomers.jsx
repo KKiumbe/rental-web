@@ -211,6 +211,8 @@ export default function CreateCustomerScreen() {
     setFormData((prev) => ({ ...prev, unitId: '' }));
   };
 
+
+
   // Validate customer form
   const validateCustomerForm = () => {
     const newErrors = {};
@@ -317,6 +319,23 @@ export default function CreateCustomerScreen() {
       setLoading(false);
     }
   };
+
+  const formatNumberWithCommas = (number) => {
+    if (!number && number !== 0) return '';
+    
+    const num = Number(number);
+  
+    if (isNaN(num)) return ''; // Safeguard in case input is not a number
+  
+    // Format with commas, no decimals
+    return num.toLocaleString('en-US', {
+      maximumFractionDigits: 0, // no decimals
+      minimumFractionDigits: 0
+    });
+  };
+  
+
+
 
   // Handle invoice form submission (Step 2, optional)
   const handleInvoiceSubmit = async (e) => {

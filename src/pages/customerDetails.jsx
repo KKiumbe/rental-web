@@ -78,7 +78,7 @@ const CustomerDetails = () => {
       }
     };
     fetchCustomerDetails();
-  }, [id]);
+  }, [id, BASEURL]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -160,6 +160,11 @@ const CustomerDetails = () => {
   // Navigate to Terminate Lease
   const handleTerminateLease = () => {
     navigate(`/terminate-lease/${id}`);
+  };
+
+  // Navigate to Edit Customer
+  const handleEditCustomer = () => {
+    navigate(`/customer-edit/${id}`);
   };
 
   // Handle back navigation
@@ -385,10 +390,17 @@ const CustomerDetails = () => {
                 </Button>
                 <Button
                   variant="contained"
-                 
-                  onClick={() => navigate(`/terminate-lease/${id}`)}
-                 
-                 
+                  onClick={handleEditCustomer}
+                  disabled={sending}
+                  startIcon={<EditIcon />}
+                  sx={{ backgroundColor: theme.palette.greenAccent.main }}
+                >
+                  {sending ? "Processing..." : "Edit Customer"}
+                </Button>
+                <Button
+                  variant="contained"
+                  onClick={handleTerminateLease}
+                  disabled={sending}
                 >
                   {sending ? "Processing..." : "Terminate Lease"}
                 </Button>
@@ -558,7 +570,7 @@ const CustomerDetails = () => {
                 pageSize={5}
                 getRowId={(row) => row.id}
                 autoHeight
-             />
+              />
             </Box>
           </>
         )

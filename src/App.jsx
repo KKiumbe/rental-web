@@ -46,6 +46,8 @@ import CreatePropertyAndUnitsScreen from "./pages/addProperty";
 import CreateReadingScreen from "./pages/addutilities";
 import LandlordsScreen from "./pages/landlords";
 import TerminateLease from "./pages/terminateLease";
+import LandlordDetailsScreen from "./pages/landlordDetails";
+import EditBuildingScreen from "./pages/editBuilding";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -136,6 +138,16 @@ const App = () => {
                     </ProtectedRoute>
                   }
                 />
+
+
+                <Route
+                  path="/edit-building/:buildingId"
+                  element={
+                    <ProtectedRoute>
+                      <EditBuildingScreen/>
+                    </ProtectedRoute>
+                  }
+                />
                 <Route
                   path="/invoices"
                   element={
@@ -218,10 +230,23 @@ const App = () => {
                     <ProtectedRoute>
                       <LandlordsScreen />
                     </ProtectedRoute>
-                  }
+                  }  
                 /> 
 
-<Route
+
+                  <Route
+                  path="/landlord/:id"
+                  element={
+                    <ProtectedRoute>
+                      <LandlordDetailsScreen />
+                    </ProtectedRoute>
+                  }
+                />
+                
+
+                
+
+                 <Route
                   path="/terminate-lease/:id"
                   element={
                     <ProtectedRoute>

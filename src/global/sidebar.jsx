@@ -127,7 +127,7 @@ const Sidebar = () => {
               <ListItemIcon sx={{ minWidth: 30 }}>
                 <Business sx={{ fontSize: 20 }} />
               </ListItemIcon>
-              {open && <ListItemText primary="View Properties" sx={{ fontSize: "0.8rem" }} />}
+              {open && <ListItemText primary="Properties" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
 
             <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/landlords")}>
@@ -136,12 +136,12 @@ const Sidebar = () => {
            </ListItemIcon>
               {open && <ListItemText primary="Landlords" sx={{ fontSize: "0.8rem" }} />}
            </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/add-property")}>
+            {/* <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/add-property")}>
               <ListItemIcon sx={{ minWidth: 30 }}>
                 <Add sx={{ fontSize: 20 }} />
               </ListItemIcon>
               {open && <ListItemText primary="Add Property/Unit" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
+            </ListItem> */}
 
           
           </List>

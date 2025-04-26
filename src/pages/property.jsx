@@ -15,6 +15,7 @@ import {
   Snackbar,
   IconButton,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add'; // Import AddIcon for the button
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
 import { Link, useNavigate } from 'react-router-dom';
@@ -87,7 +88,6 @@ const BuildingsScreen = () => {
             createdAt: building.createdAt ? new Date(building.createdAt).toISOString() : new Date().toISOString(),
             updatedAt: building.updatedAt ? new Date(building.updatedAt).toISOString() : new Date().toISOString(),
             landlord: building.landlord.name,
-            
             occupiedUnits: Array.isArray(building.units)
               ? building.units.filter((unit) =>
                   ['OCCUPIED', 'OCCUPIED_PENDING_PAYMENT'].includes(unit.status)
@@ -154,6 +154,10 @@ const BuildingsScreen = () => {
     }
   };
 
+  const handleAddProperty = () => {
+    navigate('/add-property');
+  };
+
   const columns = [
     {
       field: 'actions',
@@ -163,7 +167,6 @@ const BuildingsScreen = () => {
         <IconButton
           component={Link}
           to={`/building-details/${params.row.id}`}
-         
         >
           <VisibilityIcon />
         </IconButton>
@@ -176,8 +179,7 @@ const BuildingsScreen = () => {
       renderCell: (params) => (
         <IconButton
           component={Link}
-          to={`/building-edit/${params.row.id}`}
-       
+          to={`/edit-building/${params.row.id}`}
         >
           <EditIcon />
         </IconButton>
@@ -202,51 +204,46 @@ const BuildingsScreen = () => {
       headerName: 'Gas Rate ($)',
       width: 120,
       type: 'number',
-    
     },
     {
       field: 'waterRate',
       headerName: 'Water Rate ($)',
       width: 120,
       type: 'number',
-    
     },
     {
       field: 'landlord',
       headerName: 'Landlord',
       width: 150,
-     
     },
     {
-        field: "createdAt",
-        headerName: "Date",
-        width: 200,
-        renderCell: (params) => {
-          const value = params?.value;
-      
-          if (!value) return "N/A";
-      
-          try {
-            const date = new Date(value);
-            date.setHours(date.getHours() - 1); // Optional: adjust for timezone
-      
-            const day = String(date.getDate()).padStart(2, '0');
-            const month = date.toLocaleString('default', { month: 'short' });
-            const year = date.getFullYear();
-      
-            const hours = String(date.getHours()).padStart(2, '0');
-            const minutes = String(date.getMinutes()).padStart(2, '0');
-            const seconds = String(date.getSeconds()).padStart(2, '0');
-      
-            return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
-          } catch (error) {
-            console.error("Invalid Date:", value);
-            return "Invalid Date";
-          }
-        },
-      }
-      
-      
+      field: "createdAt",
+      headerName: "Date",
+      width: 200,
+      renderCell: (params) => {
+        const value = params?.value;
+    
+        if (!value) return "N/A";
+    
+        try {
+          const date = new Date(value);
+          date.setHours(date.getHours() - 1); // Optional: adjust for timezone
+    
+          const day = String(date.getDate()).padStart(2, '0');
+          const month = date.toLocaleString('default', { month: 'short' });
+          const year = date.getFullYear();
+    
+          const hours = String(date.getHours()).padStart(2, '0');
+          const minutes = String(date.getMinutes()).padStart(2, '0');
+          const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+          return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
+        } catch (error) {
+          console.error("Invalid Date:", value);
+          return "Invalid Date";
+        }
+      },
+    }
   ];
 
   return (
@@ -260,7 +257,7 @@ const BuildingsScreen = () => {
         <TitleComponent title="Buildings" />
       </Typography>
 
-      <Box sx={{ display: 'flex', gap: 2, marginBottom: 2, ml: 10 }}>
+      <Box sx={{ display: 'flex', gap: 2, marginBottom: 2, ml: 10, alignItems: 'center' }}>
         <TextField
           label="Search by Building or Landlord Name"
           variant="outlined"
@@ -287,7 +284,7 @@ const BuildingsScreen = () => {
           onClick={handleSearch}
           disabled={isSearching}
           sx={{
-            width: '400px',
+            width: '200px',
             '& .MuiOutlinedInput-root': {
               '& fieldset': { borderColor: theme?.palette?.grey[300] },
               '&:hover fieldset': {
@@ -315,6 +312,20 @@ const BuildingsScreen = () => {
             setPage(newPage);
           }}
         />
+        <Button
+          variant="contained"
+          startIcon={<AddIcon />}
+          onClick={handleAddProperty}
+          sx={{
+            backgroundColor: theme?.palette?.greenAccent?.main,
+            color: '#fff',
+            '&:hover': {
+              backgroundColor: theme?.palette?.greenAccent?.dark,
+            },
+          }}
+        >
+          Add Property
+        </Button>
       </Box>
 
       {loading ? (

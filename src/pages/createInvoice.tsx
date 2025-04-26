@@ -16,23 +16,16 @@ import {
   DialogTitle,
   useTheme,
   Box,
-  IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
 } from "@mui/material";
-import AddIcon from "@mui/icons-material/Add";
-import DeleteIcon from "@mui/icons-material/Delete";
 import axios from "axios";
 import TitleComponent from "../components/title";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import { useThemeStore } from "../store/authStore";
 import debounce from "lodash/debounce";
+import { LocalizationProvider } from "@mui/x-date-pickers";
+import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
+import { DatePicker } from "@mui/x-date-pickers/DatePicker";
 
 const CreateInvoice = () => {
   const navigate = useNavigate();
@@ -44,21 +37,21 @@ const CreateInvoice = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [invoiceItems, setInvoiceItems] = useState([]); // List of invoice items
-  const [newItem, setNewItem] = useState({ description: "", amount: "", quantity: "" }); // New item form
+  const [formData, setFormData] = useState({ description: "", amount: "", quantity: "" });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [isSearching, setIsSearching] = useState(false);
   const [loading, setLoading] = useState(false);
   const [isPhoneSearch, setIsPhoneSearch] = useState(false);
   const [openGenerateDialog, setOpenGenerateDialog] = useState(false);
+  const [selectedPeriod, setSelectedPeriod] = useState(null); // New state for month-year picker
 
   const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
 
   // Debug theme
   useEffect(() => {
-    console.log("Theme Mode:", theme.palette.mode);
-    console.log("background.default:", theme.palette.background.default);
-    console.log("background.paper:", theme.palette.background.paper);
+    //console.log("Theme Mode:", theme.palette.mode);
+    //console.log("background.default:", theme.palette.background.default);
+    //console.log("background.paper:", theme.palette.background.paper);
   }, [theme, darkMode]);
 
   // Redirect to login if not authenticated
@@ -151,82 +144,32 @@ const CreateInvoice = () => {
     }
   };
 
-  // Handle new item form changes
-  const handleNewItemChange = (field) => (e) => {
-    setNewItem((prev) => ({ ...prev, [field]: e.target.value }));
-  };
-
-  // Add new invoice item
-  const handleAddItem = () => {
-    const { description, amount, quantity } = newItem;
-    if (!description || !amount || !quantity) {
-      setSnackbar({ open: true, message: "Please fill in all item fields", severity: "error" });
-      return;
-    }
-    const parsedAmount = parseFloat(amount);
-    const parsedQuantity = parseInt(quantity);
-    if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      setSnackbar({ open: true, message: "Amount must be a positive number", severity: "error" });
-      return;
-    }
-    if (isNaN(parsedQuantity) || parsedQuantity <= 0) {
-      setSnackbar({ open: true, message: "Quantity must be a positive integer", severity: "error" });
-      return;
-    }
-
-    setInvoiceItems((prev) => [
-      ...prev,
-      {
-        description,
-        amount: parsedAmount,
-        quantity: parsedQuantity,
-      },
-    ]);
-    setNewItem({ description: "", amount: "", quantity: "" });
-    setSnackbar({ open: true, message: "Item added successfully", severity: "success" });
-  };
-
-  // Remove invoice item
-  const handleRemoveItem = (index) => {
-    setInvoiceItems((prev) => prev.filter((_, i) => i !== index));
-    setSnackbar({ open: true, message: "Item removed successfully", severity: "info" });
+  // Handle form field changes
+  const handleFormChange = (field) => (e) => {
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
   // Create invoice for a single customer
   const handleCreateInvoice = async () => {
-    if (!selectedCustomer) {
-      setSnackbar({ open: true, message: "Please select a customer", severity: "error" });
-      return;
-    }
-    if (invoiceItems.length === 0 && !selectedCustomer.unitId) {
-      setSnackbar({
-        open: true,
-        message: "At least one invoice item is required for customers without a unit",
-        severity: "error",
-      });
+    const { description, amount, quantity } = formData;
+    if (!description || !amount || !quantity || !selectedCustomer) {
+      setSnackbar({ open: true, message: "Please fill in all fields and select a customer", severity: "error" });
       return;
     }
 
     const invoiceData = {
       customerId: selectedCustomer.id,
-      isSystemGenerated: false,
-      invoiceItems: invoiceItems,
+      invoiceItemsData: [{ description, amount: parseFloat(amount), quantity: parseInt(quantity) }],
     };
 
     setLoading(true);
     try {
-      const response = await axios.post(`${BASEURL}/create-invoice`, invoiceData, {
-        withCredentials: true,
-      });
+      const response = await axios.post(`${BASEURL}/create-invoice`, invoiceData, { withCredentials: true });
       setSnackbar({ open: true, message: "Invoice created successfully!", severity: "success" });
-      navigate(`/get-invoice/${response.data.data.id}`);
+      navigate(`/get-invoice/${response.data.newInvoice.id}`);
     } catch (error) {
       console.error("Error creating invoice:", error);
-      setSnackbar({
-        open: true,
-        message: error.response?.data?.message || "Failed to create invoice. Please try again.",
-        severity: "error",
-      });
+      setSnackbar({ open: true, message: "Failed to create invoice. Please try again.", severity: "error" });
     } finally {
       setLoading(false);
     }
@@ -237,26 +180,45 @@ const CreateInvoice = () => {
     setOpenGenerateDialog(true);
   };
 
+  // Format the selected period to YYYY-MM
+  const formatPeriod = (date) => {
+    if (!date) return "";
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, "0"); // Months are 0-based
+    return `${year}-${month}`;
+  };
+
   // Generate invoices for all active customers
   const handleGenerateAllConfirm = async () => {
+    if (!selectedPeriod) {
+      setSnackbar({ open: true, message: "Please select a billing period", severity: "error" });
+      return;
+    }
+
+    const period = formatPeriod(selectedPeriod);
     setLoading(true);
     setOpenGenerateDialog(false);
     try {
-      await axios.post(`${BASEURL}/generate-invoices-for-all`, {}, { withCredentials: true });
+      await axios.post(
+        `${BASEURL}/generate-invoices-for-all`,
+        { period },
+        { withCredentials: true }
+      );
       setSnackbar({
         open: true,
-        message: "Invoices generated successfully for all active customers!",
+        message: `Invoices generated successfully for all active customers for ${period}!`,
         severity: "success",
       });
     } catch (error) {
       console.error("Error generating invoices for all:", error);
       setSnackbar({
         open: true,
-        message: error.response?.data?.message || "Failed to generate invoices. Please try again.",
+        message: `Failed to generate invoices for ${period}. Please try again.`,
         severity: "error",
       });
     } finally {
       setLoading(false);
+      setSelectedPeriod(null); // Reset the period after submission
     }
   };
 
@@ -293,72 +255,33 @@ const CreateInvoice = () => {
   // Render selected customer
   const renderSelectedCustomer = () =>
     selectedCustomer && (
-      <Card sx={{ mt: 2, mb: 2 }}>
+      <Card sx={{ mt: 2 }}>
         <CardContent>
           <Typography variant="h6">Selected Customer</Typography>
           <Typography>Name: {`${selectedCustomer.firstName} ${selectedCustomer.lastName}`}</Typography>
           <Typography>Phone: {selectedCustomer.phoneNumber}</Typography>
-          <Typography>Category: {selectedCustomer.category || "N/A"}</Typography>
-          <Typography>Monthly Charge: {selectedCustomer.monthlyCharge || "N/A"}</Typography>
-          <Typography>Closing Balance: {selectedCustomer.closingBalance || 0}</Typography>
-          <Typography>Unit: {selectedCustomer.unitId ? "Assigned" : "Not Assigned"}</Typography>
+          <Typography>Category: {selectedCustomer.category}</Typography>
+          <Typography>Monthly Charge: {selectedCustomer.monthlyCharge}</Typography>
+          <Typography>Closing Balance: {selectedCustomer.closingBalance}</Typography>
         </CardContent>
       </Card>
     );
-
-  // Render invoice items table
-  const renderInvoiceItems = () => (
-    <Box sx={{ mt: 2 }}>
-      <Typography variant="h6">Added Items</Typography>
-      {invoiceItems.length > 0 ? (
-        <TableContainer component={Paper}>
-          <Table>
-            <TableHead>
-              <TableRow>
-                <TableCell>Description</TableCell>
-                <TableCell>Amount</TableCell>
-                <TableCell>Quantity</TableCell>
-                <TableCell>Total</TableCell>
-                <TableCell>Actions</TableCell>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {invoiceItems.map((item, index) => (
-                <TableRow key={index}>
-                  <TableCell>{item.description}</TableCell>
-                  <TableCell>{item.amount.toFixed(2)}</TableCell>
-                  <TableCell>{item.quantity}</TableCell>
-                  <TableCell>{(item.amount * item.quantity).toFixed(2)}</TableCell>
-                  <TableCell>
-                    <IconButton onClick={() => handleRemoveItem(index)} color="error">
-                      <DeleteIcon />
-                    </IconButton>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableContainer>
-      ) : (
-        <Typography>No items added yet. {selectedCustomer?.unitId ? "You can create an invoice without items for this customer." : "At least one item is required."}</Typography>
-      )}
-    </Box>
-  );
 
   return (
     <Box
       sx={{
         minHeight: "100vh",
         width: "100%",
-       
+        bgcolor: theme.palette.background.paper,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
+        justifyContent: "center",
         p: 0,
       }}
     >
       {/* Generate Invoices for All Button */}
-      <Box sx={{ mb: 2, display: "flex", justifyContent: "flex-end", width: "100%", maxWidth: 600 }}>
+      <Box sx={{ mb: 2, display: "flex", justifyContent: "flex-end", ml: 100 }}>
         <Button
           variant="contained"
           color="secondary"
@@ -414,83 +337,93 @@ const CreateInvoice = () => {
         {/* Selected Customer */}
         {renderSelectedCustomer()}
 
-        {/* Invoice Items Form */}
-        {selectedCustomer && (
-          <Box sx={{ mt: 2 }}>
-            <Typography variant="h6">Add Invoice Item</Typography>
-            <TextField
-              label="Description"
-              value={newItem.description}
-              onChange={handleNewItemChange("description")}
-              fullWidth
-              margin="normal"
-            />
-            <TextField
-              label="Amount"
-              value={newItem.amount}
-              onChange={handleNewItemChange("amount")}
-              fullWidth
-              margin="normal"
-              type="number"
-              inputProps={{ min: 0, step: 0.01 }}
-            />
-            <TextField
-              label="Quantity"
-              value={newItem.quantity}
-              onChange={handleNewItemChange("quantity")}
-              fullWidth
-              margin="normal"
-              type="number"
-              inputProps={{ min: 1, step: 1 }}
-            />
-            <Box sx={{ display: "flex", justifyContent: "flex-start", mt: 1 }}>
-              <Button
-                variant="outlined"
-                startIcon={<AddIcon />}
-                onClick={handleAddItem}
-              >
-                Add
-              </Button>
-            </Box>
+        {/* Invoice Form */}
+        <TextField
+          label="Description"
+          value={formData.description}
+          onChange={handleFormChange("description")}
+          fullWidth
+          margin="normal"
+        />
+        <TextField
+          label="Amount"
+          value={formData.amount}
+          onChange={handleFormChange("amount")}
+          fullWidth
+          margin="normal"
+          type="number"
+        />
+        <TextField
+          label="Quantity"
+          value={formData.quantity}
+          onChange={handleFormChange("quantity")}
+          fullWidth
+          margin="normal"
+          type="number"
+          inputProps={{ min: 0, step: 1 }}
+        />
 
-            {/* Added Items */}
-            {renderInvoiceItems()}
-          </Box>
-        )}
-
-        {/* Create Invoice Button */}
-        {selectedCustomer && (
-          <Box sx={{ mt: 3, display: "flex", justifyContent: "flex-end" }}>
-            <Button
-              variant="contained"
-              color="primary"
-              onClick={handleCreateInvoice}
-              disabled={loading}
-            >
-              {loading ? <CircularProgress size={24} /> : "Create Invoice"}
-            </Button>
-          </Box>
-        )}
+        <Box sx={{ mt: 2, display: "flex", justifyContent: "flex-end" }}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleCreateInvoice}
+            disabled={loading}
+          >
+            {loading ? <CircularProgress size={24} /> : "Create Invoice"}
+          </Button>
+        </Box>
       </Box>
 
       {/* Generate Invoices for All Confirmation Dialog */}
       <Dialog
         open={openGenerateDialog}
-        onClose={() => setOpenGenerateDialog(false)}
+        onClose={() => {
+          setOpenGenerateDialog(false);
+          setSelectedPeriod(null); // Reset period on close
+        }}
         aria-labelledby="generate-dialog-title"
         aria-describedby="generate-dialog-description"
       >
         <DialogTitle id="generate-dialog-title">Confirm Generate Invoices</DialogTitle>
         <DialogContent>
           <DialogContentText id="generate-dialog-description">
-            This action will create invoices for all active customers and update their balances. This cannot be undone. Are you sure you want to proceed?
+            This action will create invoices for all active customers and update their balances for the selected period. This cannot be undone. Are you sure you want to proceed?
           </DialogContentText>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              views={["year", "month"]}
+              label="Select Billing Period (Year-Month)"
+              value={selectedPeriod}
+              onChange={(newValue) => setSelectedPeriod(newValue)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  fullWidth
+                  margin="normal"
+                  helperText="Format: YYYY-MM (e.g., 2025-04)"
+                />
+              )}
+              maxDate={new Date()} // Prevent future dates
+            />
+          </LocalizationProvider>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenGenerateDialog(false)} color="primary">
+          <Button
+            onClick={() => {
+              setOpenGenerateDialog(false);
+              setSelectedPeriod(null);
+            }}
+            color="primary"
+          >
             Cancel
           </Button>
-          <Button onClick={handleGenerateAllConfirm} color="primary" variant="contained" disabled={loading}>
+          <Button
+            onClick={handleGenerateAllConfirm}
+            color="primary"
+            variant="contained"
+            disabled={loading}
+          >
             {loading ? <CircularProgress size={20} /> : "Confirm"}
           </Button>
         </DialogActions>
