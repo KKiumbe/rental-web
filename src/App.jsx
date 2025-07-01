@@ -48,6 +48,8 @@ import LandlordsScreen from "./pages/landlords";
 import TerminateLease from "./pages/terminateLease";
 import LandlordDetailsScreen from "./pages/landlordDetails";
 import EditBuildingScreen from "./pages/editBuilding";
+import WaterReadingsList from "./pages/waterReadings";
+import MeterReadingDetails from "./pages/meterReadingDetails";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -215,13 +217,21 @@ const App = () => {
 
 
                      <Route
-                  path="/record-utility"
+                  path="/water-readings"
                   element={
                     <ProtectedRoute>
-                      <CreateReadingScreen />
+                      <WaterReadingsList/>
                     </ProtectedRoute>
                   }
                 /> 
+
+                <Route
+                  path="/water-reading/:id"
+                  element={
+                    <ProtectedRoute>
+                      <MeterReadingDetails />
+                    </ProtectedRoute>
+                  }/>
 
 
                    <Route

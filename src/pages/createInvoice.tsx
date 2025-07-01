@@ -35,8 +35,20 @@ const CreateInvoice = () => {
 
   // State management
   const [searchQuery, setSearchQuery] = useState("");
-  const [searchResults, setSearchResults] = useState([]);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
+  // Define a type for Customer
+  type Customer = {
+    id: number;
+    firstName: string;
+    lastName: string;
+    phoneNumber: string;
+    category?: string;
+    monthlyCharge?: number;
+    closingBalance?: number;
+    // Add other fields as needed
+  };
+
+  const [searchResults, setSearchResults] = useState<Customer[]>([]);
+  const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
   const [formData, setFormData] = useState({ description: "", amount: "", quantity: "" });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
   const [isSearching, setIsSearching] = useState(false);

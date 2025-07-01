@@ -277,23 +277,25 @@ function SendBillsScreen() {
       </Typography>
       <Paper elevation={3}>
         <Box>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            centered
-            sx={{
-              mb: 3,
-              border: `1px solid ${theme.palette.primary.light}`,
-              borderRadius: 2,
-              '& .MuiTab-root': { color: theme.palette.primary.contrastText },
-              '& .Mui-selected': { color: theme.palette.greenAccent },
-              '& .MuiTabs-indicator': { backgroundColor: theme.palette.greenAccent.main },
-            }}
-          >
-            <Tab label="Send Bills to All" />
-            <Tab label="Send Bill to One Customer" />
-            <Tab label="Send Bills to Group" />
-          </Tabs>
+         <Tabs
+  value={tabValue}
+  onChange={handleTabChange}
+  variant="scrollable"
+  scrollButtons="auto"
+  aria-label="bills tabs"
+  sx={{
+    mb: 3,
+    border: `1px solid ${theme.palette.primary.light}`,
+    borderRadius: 2,
+    '& .MuiTab-root': { color: theme.palette.primary.contrastText },
+    '& .Mui-selected': { color: theme.palette.greenAccent },
+    '& .MuiTabs-indicator': { backgroundColor: theme.palette.greenAccent.main },
+  }}
+>
+  <Tab label="Send Bills to All" />
+  <Tab label="Send Bill to One Customer" />
+  <Tab label="Send Bills to Group" />
+</Tabs>
         </Box>
 
         <Box sx={{ p: 3 }}>

@@ -1,4 +1,5 @@
-import React, { useEffect, useState, Component } from 'react';
+
+import  { useEffect, useState, Component } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -15,7 +16,15 @@ import {
   CardContent,
   Grid,
   IconButton,
+  Button,
+  Modal,
+  TextField,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
 } from '@mui/material';
+import AddIcon from '@mui/icons-material/Add';
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
 import VisibilityIcon from '@mui/icons-material/Visibility';
@@ -45,6 +54,17 @@ const BuildingDetailsScreen = () => {
   const [building, setBuilding] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [openModal, setOpenModal] = useState(false); // State for modal
+  const [unitForm, setUnitForm] = useState({
+    buildingId: '',
+    unitNumber: '',
+    monthlyCharge: '',
+    depositAmount: '',
+    garbageCharge: '',
+    serviceCharge: '',
+    status: 'VACANT',
+  });
+  const [formError, setFormError] = useState(''); // State for form errors
   const { id } = useParams();
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -65,6 +85,8 @@ const BuildingDetailsScreen = () => {
       });
       console.log('Fetched building:', JSON.stringify(response.data));
       setBuilding(response.data);
+      // Set buildingId in unitForm when building data is fetched
+      setUnitForm((prev) => ({ ...prev, buildingId: response.data.id || id }));
     } catch (err) {
       console.error('Fetch building error:', err);
       if (err.response?.status === 401) {
@@ -85,6 +107,78 @@ const BuildingDetailsScreen = () => {
     }
   }, [id]);
 
+  // Handle opening and closing the modal
+  const handleAddUnit = () => {
+    setOpenModal(true);
+  };
+
+  const handleCloseModal = () => {
+    setOpenModal(false);
+    setFormError('');
+    // Reset form fields, but keep buildingId
+    setUnitForm({
+      buildingId: unitForm.buildingId,
+      unitNumber: '',
+      monthlyCharge: '',
+      depositAmount: '',
+      garbageCharge: '',
+      serviceCharge: '',
+      status: 'VACANT',
+    });
+  };
+
+  // Handle form input changes
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setUnitForm((prev) => ({ ...prev, [name]: value }));
+  };
+
+  // Handle form submission
+  const handleFormSubmit = async (e) => {
+    e.preventDefault();
+    // Basic validation
+    if (
+      !unitForm.unitNumber ||
+      !unitForm.monthlyCharge ||
+      !unitForm.depositAmount ||
+      !unitForm.garbageCharge ||
+      !unitForm.serviceCharge
+    ) {
+      setFormError('All fields are required except status.');
+      return;
+    }
+    // Validate numeric fields
+    if (
+      isNaN(unitForm.monthlyCharge) ||
+      isNaN(unitForm.depositAmount) ||
+      isNaN(unitForm.garbageCharge) ||
+      isNaN(unitForm.serviceCharge)
+    ) {
+      setFormError('Charges must be valid numbers.');
+      return;
+    }
+    try {
+      // Ensure numeric fields are sent as numbers
+      const payload = {
+        buildingId: unitForm.buildingId,
+        unitNumber: unitForm.unitNumber,
+        monthlyCharge: Number(unitForm.monthlyCharge),
+        depositAmount: Number(unitForm.depositAmount),
+        garbageCharge: Number(unitForm.garbageCharge),
+        serviceCharge: Number(unitForm.serviceCharge),
+        status: unitForm.status,
+      };
+      await axios.post(`${BASE_URL}/create-unit`, payload, {
+        withCredentials: true,
+      });
+      handleCloseModal();
+      fetchBuilding(); // Refresh building data to include the new unit
+    } catch (err) {
+      console.error('Create unit error:', err);
+      setFormError('Failed to create unit. Please try again.');
+    }
+  };
+
   // Sanitize building data
   const sanitizeBuilding = (data) => {
     if (!data || typeof data !== 'object') {
@@ -97,6 +191,7 @@ const BuildingDetailsScreen = () => {
       buildingName: data.buildingName || data.name || 'Unnamed',
       address: data.address || 'N/A',
       unitCount: Number(data.unitCount ?? 0),
+      managementRate: Number(data.managementRate ?? 0),
       gasRate: Number(data.gasRate ?? 0),
       waterRate: Number(data.waterRate ?? 0),
       createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString(),
@@ -136,7 +231,7 @@ const BuildingDetailsScreen = () => {
           }))
         : [],
       customers: Array.isArray(data.units)
-        ? data.units
+        ? data.units // Fixed: Changed dataunits to data.units
             .flatMap((unit) =>
               Array.isArray(unit.customers)
                 ? unit.customers.map((customer) => ({
@@ -244,7 +339,6 @@ const BuildingDetailsScreen = () => {
       valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     { field: 'status', headerName: 'Status', width: 100 },
-    
   ];
 
   const sanitizedBuilding = building ? sanitizeBuilding(building) : null;
@@ -278,6 +372,7 @@ const BuildingDetailsScreen = () => {
                   <Grid item xs={12} sm={6}>
                     <Typography><strong>Address:</strong> {sanitizedBuilding.address}</Typography>
                     <Typography><strong>Total Units:</strong> {sanitizedBuilding.unitCount}</Typography>
+                    <Typography><strong>Management Rate:</strong> ${sanitizedBuilding.managementRate.toFixed(2)}</Typography>
                     <Typography><strong>Gas Rate:</strong> ${sanitizedBuilding.gasRate.toFixed(2)}</Typography>
                     <Typography><strong>Water Rate:</strong> ${sanitizedBuilding.waterRate.toFixed(2)}</Typography>
                   </Grid>
@@ -298,10 +393,20 @@ const BuildingDetailsScreen = () => {
               </CardContent>
             </Card>
 
-            {/* Units DataGrid */}
-            <Typography variant="h6" gutterBottom>
-              Units ({sanitizedBuilding.units.length})
-            </Typography>
+            {/* Units Section */}
+            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+              <Typography variant="h6" gutterBottom>
+                Units ({sanitizedBuilding.units.length})
+              </Typography>
+              <Button
+                variant="contained"
+                startIcon={<AddIcon />}
+                onClick={handleAddUnit}
+                sx={{ backgroundColor: theme?.palette?.greenAccent?.main, color: '#fff' }}
+              >
+                Add Unit
+              </Button>
+            </Box>
             <Paper sx={{ width: '100%', mb: 4 }}>
               <DataGrid
                 rows={sanitizedBuilding.units}
@@ -347,6 +452,103 @@ const BuildingDetailsScreen = () => {
                 }}
               />
             </Paper>
+
+            {/* Add Unit Modal */}
+            <Modal open={openModal} onClose={handleCloseModal}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 400,
+                  bgcolor: 'background.paper',
+                  boxShadow: 24,
+                  p: 4,
+                  borderRadius: 1,
+                }}
+              >
+                <Typography variant="h6" gutterBottom>
+                  Add New Unit
+                </Typography>
+                {formError && (
+                  <Typography color="error" sx={{ mb: 2 }}>
+                    {formError}
+                  </Typography>
+                )}
+                <form onSubmit={handleFormSubmit}>
+                  <TextField
+                    label="Unit Number"
+                    name="unitNumber"
+                    value={unitForm.unitNumber}
+                    onChange={handleFormChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                  />
+                  <TextField
+                    label="Monthly Charge ($)"
+                    name="monthlyCharge"
+                    value={unitForm.monthlyCharge}
+                    onChange={handleFormChange}
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    required
+                  />
+                  <TextField
+                    label="Deposit Amount ($)"
+                    name="depositAmount"
+                    value={unitForm.depositAmount}
+                    onChange={handleFormChange}
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    required
+                  />
+                  <TextField
+                    label="Garbage Charge ($)"
+                    name="garbageCharge"
+                    value={unitForm.garbageCharge}
+                    onChange={handleFormChange}
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    required
+                  />
+                  <TextField
+                    label="Service Charge ($)"
+                    name="serviceCharge"
+                    value={unitForm.serviceCharge}
+                    onChange={handleFormChange}
+                    fullWidth
+                    margin="normal"
+                    type="number"
+                    required
+                  />
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      name="status"
+                      value={unitForm.status}
+                      onChange={handleFormChange}
+                      label="Status"
+                    >
+                      <MenuItem value="VACANT">Vacant</MenuItem>
+                      <MenuItem value="OCCUPIED">Occupied</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
+                    <Button onClick={handleCloseModal} sx={{ mr: 1 }}>
+                      Cancel
+                    </Button>
+                    <Button type="submit" variant="contained" color="primary">
+                      Add Unit
+                    </Button>
+                  </Box>
+                </form>
+              </Box>
+            </Modal>
           </Box>
         </ErrorBoundary>
       )}

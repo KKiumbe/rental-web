@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Component } from 'react';
+import { useEffect, useState, Component } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -12,11 +12,16 @@ import {
   CircularProgress,
   Divider,
   Grid,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
 } from '@mui/material';
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useAuthStore } from '../store/authStore';
+import PropTypes from 'prop-types';
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -38,6 +43,10 @@ class ErrorBoundary extends Component {
   }
 }
 
+ErrorBoundary.propTypes = {
+  children: PropTypes.node,
+};
+
 const EditBuildingScreen = () => {
   const navigate = useNavigate();
   const { buildingId } = useParams();
@@ -51,8 +60,8 @@ const EditBuildingScreen = () => {
     unitCount: '',
     gasRate: '',
     waterRate: '',
-    allowWaterBillingWithAverages: false,
-    allowGasBillingWithAverages: false,
+    managementRate: '',
+    billType: 'FULL',
     billWater: false,
     billGas: false,
     billServiceCharge: false,
@@ -60,6 +69,8 @@ const EditBuildingScreen = () => {
     billSecurity: false,
     billAmenities: false,
     billBackupGenerator: false,
+    allowWaterBillingWithAverages: false,
+    allowGasBillingWithAverages: false,
   });
   const [landlordName, setLandlordName] = useState('');
   const [loading, setLoading] = useState(false);
@@ -89,8 +100,8 @@ const EditBuildingScreen = () => {
         unitCount: building.unitCount ? building.unitCount.toString() : '',
         gasRate: building.gasRate ? building.gasRate.toString() : '',
         waterRate: building.waterRate ? building.waterRate.toString() : '',
-        allowWaterBillingWithAverages: building.allowWaterBillingWithAverages || false,
-        allowGasBillingWithAverages: building.allowGasBillingWithAverages || false,
+        managementRate: building.managementRate ? building.managementRate.toString() : '',
+        billType: building.billType || 'FULL',
         billWater: building.billWater || false,
         billGas: building.billGas || false,
         billServiceCharge: building.billServiceCharge || false,
@@ -98,6 +109,8 @@ const EditBuildingScreen = () => {
         billSecurity: building.billSecurity || false,
         billAmenities: building.billAmenities || false,
         billBackupGenerator: building.billBackupGenerator || false,
+        allowWaterBillingWithAverages: building.allowWaterBillingWithAverages || false,
+        allowGasBillingWithAverages: building.allowGasBillingWithAverages || false,
       });
       setLandlordName(building.landlord?.name || 'Unknown');
     } catch (error) {
@@ -116,18 +129,34 @@ const EditBuildingScreen = () => {
     }
   }, [currentUser, buildingId]);
 
+  // Automatically set billWater to true when billType is WATER_ONLY
+  useEffect(() => {
+    if (form.billType === 'WATER_ONLY' && !form.billWater) {
+      setForm((prev) => ({ ...prev, billWater: true }));
+    }
+  }, [form.billType]);
+
   // Validate form
   const validateForm = () => {
     const newErrors = {};
     if (!form.name) newErrors.name = 'Building name is required';
-    if (form.unitCount && (isNaN(form.unitCount) || form.unitCount < 0)) {
+    if (form.unitCount && (isNaN(form.unitCount) || parseInt(form.unitCount) < 0)) {
       newErrors.unitCount = 'Must be a non-negative number';
     }
-    if (form.gasRate && (isNaN(form.gasRate) || form.gasRate < 0)) {
+    if (form.gasRate && (isNaN(form.gasRate) || parseFloat(form.gasRate) < 0)) {
       newErrors.gasRate = 'Must be a non-negative number';
     }
-    if (form.waterRate && (isNaN(form.waterRate) || form.waterRate < 0)) {
+    if (form.waterRate && (isNaN(form.waterRate) || parseFloat(form.waterRate) < 0)) {
       newErrors.waterRate = 'Must be a non-negative number';
+    }
+    if (form.managementRate && (isNaN(form.managementRate) || parseFloat(form.managementRate) < 0)) {
+      newErrors.managementRate = 'Must be a non-negative number';
+    }
+    if (form.billType === 'WATER_ONLY' && !form.billWater) {
+      newErrors.billWater = 'Bill Water must be enabled for WATER_ONLY billing';
+    }
+    if (form.billType === 'WATER_ONLY' && (!form.waterRate || parseFloat(form.waterRate) <= 0)) {
+      newErrors.waterRate = 'A valid water rate is required for WATER_ONLY billing';
     }
     return newErrors;
   };
@@ -149,8 +178,8 @@ const EditBuildingScreen = () => {
         unitCount: form.unitCount ? parseInt(form.unitCount) : null,
         gasRate: form.gasRate ? parseFloat(form.gasRate) : null,
         waterRate: form.waterRate ? parseFloat(form.waterRate) : null,
-        allowWaterBillingWithAverages: form.allowWaterBillingWithAverages,
-        allowGasBillingWithAverages: form.allowGasBillingWithAverages,
+        managementRate: form.managementRate ? parseFloat(form.managementRate) : null,
+        billType: form.billType,
         billWater: form.billWater,
         billGas: form.billGas,
         billServiceCharge: form.billServiceCharge,
@@ -158,13 +187,34 @@ const EditBuildingScreen = () => {
         billSecurity: form.billSecurity,
         billAmenities: form.billAmenities,
         billBackupGenerator: form.billBackupGenerator,
+        allowWaterBillingWithAverages: form.allowWaterBillingWithAverages,
+        allowGasBillingWithAverages: form.allowGasBillingWithAverages,
       };
 
       const response = await axios.put(`${BASE_URL}/buildings/${buildingId}`, payload, {
         withCredentials: true,
       });
-      setSnackbarMessage(response.data.message);
+      setSnackbarMessage(response.data.message || 'Building updated successfully');
       setSnackbarOpen(true);
+      // Refresh form with updated data from server
+      setForm({
+        name: response.data.building.name || '',
+        address: response.data.building.address || '',
+        unitCount: response.data.building.unitCount ? response.data.building.unitCount.toString() : '',
+        gasRate: response.data.building.gasRate ? response.data.building.gasRate.toString() : '',
+        waterRate: response.data.building.waterRate ? response.data.building.waterRate.toString() : '',
+        managementRate: response.data.building.managementRate ? response.data.building.managementRate.toString() : '',
+        billType: response.data.building.billType || 'FULL',
+        billWater: response.data.building.billWater || false,
+        billGas: response.data.building.billGas || false,
+        billServiceCharge: response.data.building.billServiceCharge || false,
+        billGarbage: response.data.building.billGarbage || false,
+        billSecurity: response.data.building.billSecurity || false,
+        billAmenities: response.data.building.billAmenities || false,
+        billBackupGenerator: response.data.building.billBackupGenerator || false,
+        allowWaterBillingWithAverages: response.data.building.allowWaterBillingWithAverages || false,
+        allowGasBillingWithAverages: response.data.building.allowGasBillingWithAverages || false,
+      });
       setTimeout(() => {
         navigate('/properties');
       }, 2000);
@@ -258,6 +308,25 @@ const EditBuildingScreen = () => {
                     margin="normal"
                   />
                 </Grid>
+                <Grid item xs={12}>
+                  <FormControl fullWidth margin="normal" size="small">
+                    <InputLabel>Bill Type</InputLabel>
+                    <Select
+                      name="billType"
+                      value={form.billType}
+                      onChange={handleChange}
+                      error={!!errors.billType}
+                    >
+                      <MenuItem value="FULL">FULL</MenuItem>
+                      <MenuItem value="WATER_ONLY">WATER_ONLY</MenuItem>
+                    </Select>
+                    {errors.billType && (
+                      <Typography color="error" variant="caption">
+                        {errors.billType}
+                      </Typography>
+                    )}
+                  </FormControl>
+                </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
 
@@ -277,9 +346,9 @@ const EditBuildingScreen = () => {
               />
               <Divider sx={{ my: 2 }} />
 
-              {/* Billing Rate for Water & Gas */}
+              {/* Billing Rates */}
               <Typography variant="subtitle1" gutterBottom>
-                Billing Rate for Water & Gas
+                Billing Rates
               </Typography>
               <Grid container spacing={2}>
                 <Grid item xs={12} sm={6}>
@@ -314,6 +383,22 @@ const EditBuildingScreen = () => {
                     inputProps={{ step: '0.01' }}
                   />
                 </Grid>
+                <Grid item xs={12}>
+                  <TextField
+                    fullWidth
+                    label="Management Rate ($)"
+                    name="managementRate"
+                    type="number"
+                    value={form.managementRate}
+                    onChange={handleChange}
+                    error={!!errors.managementRate}
+                    helperText={errors.managementRate}
+                    variant="outlined"
+                    size="small"
+                    margin="normal"
+                    inputProps={{ step: '0.01' }}
+                  />
+                </Grid>
               </Grid>
               <Divider sx={{ my: 2 }} />
 
@@ -329,6 +414,7 @@ const EditBuildingScreen = () => {
                         name="billWater"
                         checked={form.billWater}
                         onChange={handleChange}
+                        disabled={form.billType === 'WATER_ONLY'}
                       />
                     }
                     label="Bill Water"
@@ -446,7 +532,7 @@ const EditBuildingScreen = () => {
                 <Button
                   type="submit"
                   variant="contained"
-                  color="primary"
+                  sx={{ backgroundColor: theme.palette.greenAccent.main }}
                   disabled={loading}
                   fullWidth
                 >
@@ -455,6 +541,7 @@ const EditBuildingScreen = () => {
                 <Button
                   variant="outlined"
                   onClick={() => navigate('/properties')}
+                  sx={{ color: theme.palette.greenAccent.main, borderColor: theme.palette.greenAccent.main }}
                   fullWidth
                 >
                   Cancel

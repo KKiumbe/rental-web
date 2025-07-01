@@ -149,6 +149,8 @@ function DebtManager() {
               value={activeTab}
               onChange={handleTabChange}
               centered
+               variant="scrollable"
+              scrollButtons="auto"
               sx={{
                 mb: 3,
                 "& .MuiTab-root": { color: theme.palette.grey[100] },

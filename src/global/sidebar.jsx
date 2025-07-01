@@ -38,7 +38,7 @@ const Sidebar = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(true); // Controls sidebar collapse
   const [submenuOpen, setSubmenuOpen] = useState({
-    customers: false,
+    tenants: false,
     invoices: false,
     payments: false,
     communication: false,
@@ -83,14 +83,14 @@ const Sidebar = () => {
         </ListItem>
 
         {/* Customers Menu */}
-        <ListItem button onClick={() => toggleSubmenu("customers")} sx={{ py: 1 }}>
+        <ListItem button onClick={() => toggleSubmenu("tenants")} sx={{ py: 1 }}>
           <ListItemIcon sx={{ minWidth: 40 }}>
             <Person sx={{ fontSize: 24 }} />
           </ListItemIcon>
-          {open && <ListItemText primary="Customers" sx={{ fontSize: "0.9rem" }} />}
-          {open && (submenuOpen.customers ? <ExpandLess /> : <ExpandMore />)}
+          {open && <ListItemText primary="Tenants" sx={{ fontSize: "0.9rem" }} />}
+          {open && (submenuOpen.tenants ? <ExpandLess /> : <ExpandMore />)}
         </ListItem>
-        <Collapse in={submenuOpen.customers} timeout="auto" unmountOnExit>
+        <Collapse in={submenuOpen.tenants} timeout="auto" unmountOnExit>
           <List component="div" disablePadding>
             <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/customers")}>
               <ListItemIcon sx={{ minWidth: 30 }}>
@@ -104,11 +104,11 @@ const Sidebar = () => {
               </ListItemIcon>
               {open && <ListItemText primary="Create" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/record-utility")}>
+            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/water-readings")}>
               <ListItemIcon sx={{ minWidth: 30 }}>
                 <Water sx={{ fontSize: 20 }} />
               </ListItemIcon>
-              {open && <ListItemText primary="Record utility" sx={{ fontSize: "0.8rem" }} />}
+              {open && <ListItemText primary="Water utility" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
           </List>
         </Collapse>
@@ -240,30 +240,7 @@ const Sidebar = () => {
           </List>
         </Collapse>
 
-        {/* Tasks Menu */}
-        <ListItem button onClick={() => toggleSubmenu("tasks")} sx={{ py: 1 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <Assignment sx={{ fontSize: 24 }} />
-          </ListItemIcon>
-          {open && <ListItemText primary="Tasks" sx={{ fontSize: "0.9rem" }} />}
-          {open && (submenuOpen.tasks ? <ExpandLess /> : <ExpandMore />)}
-        </ListItem>
-        <Collapse in={submenuOpen.tasks} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/tasks")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <Assignment sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="View" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/tasks/create")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <Add sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="Create" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-          </List>
-        </Collapse>
+     
 
         {/* Reports */}
         <ListItem button onClick={() => toggleSubmenu("reports")} sx={{ py: 1 }}>

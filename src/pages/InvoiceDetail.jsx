@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Card,
@@ -180,7 +180,7 @@ const InvoiceDetails = () => {
   }, [id]);
 
   const renderInvoiceItems = () => {
-    if (!invoice?.items || invoice.items.length === 0) {
+    if (!invoice?. InvoiceItem || invoice. InvoiceItem.length === 0) {
       return <Typography sx={{ color: theme.palette.grey[100] }}>No invoice items found.</Typography>;
     }
     return (
@@ -195,7 +195,7 @@ const InvoiceDetails = () => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {invoice.items.map((item) => (
+            {invoice. InvoiceItem.map((item) => (
               <TableRow key={item.id}>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>{item.description}</TableCell>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>KES {item.amount.toFixed(2)}</TableCell>

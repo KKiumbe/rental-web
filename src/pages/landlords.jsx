@@ -177,29 +177,30 @@ export default function LandlordsScreen() {
         });
       }
 
-      if (response.status === 200) {
-        console.log(`${dialogMode === 'add' ? 'Landlord created' : 'Landlord updated'} successfully, closing dialog...`);
-        if (dialogMode === 'add') {
-          setLandlords((prev) => [...prev, response.data.landlord]);
-          setSnackbarMessage(response.data.message || 'Landlord added successfully');
-        } else {
-          setLandlords((prev) =>
-            prev.map((landlord) =>
-              landlord.id === selectedLandlord.id ? { ...landlord, ...payload } : landlord
-            )
-          );
-          setSnackbarMessage(response.data.message || 'Landlord updated successfully');
-        }
-        setDialogOpen(false);
-        setSnackbarOpen(true);
-        setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
-        setDialogMode('add');
-        setSelectedLandlord(null);
-      } else {
-        console.log('Unexpected response status:', response.status);
-        setSnackbarMessage('Unexpected response status: ' + response.status);
-        setSnackbarOpen(true);
-      }
+     
+if (response.status === 200 || response.status === 201) {
+  console.log(`${dialogMode === 'add' ? 'Landlord created' : 'Landlord updated'} successfully, closing dialog...`);
+  if (dialogMode === 'add') {
+    setLandlords((prev) => [...prev, response.data.landlord]);
+    setSnackbarMessage(response.data.message || 'Landlord added successfully');
+  } else {
+    setLandlords((prev) =>
+      prev.map((landlord) =>
+        landlord.id === selectedLandlord.id ? { ...landlord, ...payload } : landlord
+      )
+    );
+    setSnackbarMessage(response.data.message || 'Landlord updated successfully');
+  }
+  setDialogOpen(false);
+  setSnackbarOpen(true);
+  setFormData({ firstName: '', lastName: '', email: '', phoneNumber: '', status: 'ACTIVE' });
+  setDialogMode('add');
+  setSelectedLandlord(null);
+} else {
+  console.log('Unexpected response status:', response.status);
+  setSnackbarMessage('Unexpected response status: ' + response.status);
+  setSnackbarOpen(true);
+}
     } catch (err) {
       console.error(`Error ${dialogMode === 'add' ? 'adding' : 'updating'} landlord:`, err);
       if (err.response) {
@@ -262,20 +263,27 @@ export default function LandlordsScreen() {
     navigate(`/landlord/${id}`);
   };
 
-  // Format date safely
+
+
   const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    const date = new Date(dateString);
-    if (isNaN(date.getTime())) return 'Invalid Date';
-    return date.toLocaleString('en-US', {
-      year: 'numeric',
-      month: 'numeric',
-      day: 'numeric',
-      hour: 'numeric',
-      minute: 'numeric',
-      hour12: true,
-    });
-  };
+  if (!dateString) {
+    console.warn('Missing dateString in formatDate');
+    return 'N/A';
+  }
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) {
+    console.warn('Invalid dateString in formatDate:', dateString);
+    return 'Invalid Date';
+  }
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+  });
+};
 
   // Render add/edit landlord form
   const renderLandlordForm = () => (
@@ -409,41 +417,37 @@ export default function LandlordsScreen() {
                    
                   </TableRow>
                 </TableHead>
+
                 <TableBody>
-                  {landlords.map((landlord) => {
-                    console.log('Landlord createdAt:', landlord.createdAt);
-                    return (
-                      <TableRow key={landlord.id}>
-
-                         <TableCell>
-                         
-
-                            <IconButton onClick={() => handleViewLandlord(landlord.id)} title="View">
-                            <VisibilityIcon color="info" />
-                          </IconButton>
-                        
-                        
-                        </TableCell>
-
-                        <TableCell>
-                        <IconButton onClick={() => handleEditLandlord(landlord)} title="Edit">
-                            <EditIcon color="primary" />
-                            </IconButton>
-
-
-                        </TableCell>
-
-                        <TableCell>{landlord.firstName}</TableCell>
-                        <TableCell>{landlord.lastName}</TableCell>
-                        <TableCell>{landlord.email || 'N/A'}</TableCell>
-                        <TableCell>{landlord.phoneNumber}</TableCell>
-                        <TableCell>{landlord.status}</TableCell>
-                        <TableCell>{formatDate(landlord.createdAt)}</TableCell>
-                       
-                      </TableRow>
-                    );
-                  })}
-                </TableBody>
+  {landlords.map((landlord) => {
+    if (!landlord || !landlord.id || !landlord.createdAt) {
+      console.warn('Invalid landlord object:', landlord);
+      return null;
+    }
+    console.log('Landlord createdAt:', landlord.createdAt);
+    return (
+      <TableRow key={landlord.id}>
+        <TableCell>
+          <IconButton onClick={() => handleViewLandlord(landlord.id)} title="View">
+            <VisibilityIcon color="info" />
+          </IconButton>
+        </TableCell>
+        <TableCell>
+          <IconButton onClick={() => handleEditLandlord(landlord)} title="Edit">
+            <EditIcon color="primary" />
+          </IconButton>
+        </TableCell>
+        <TableCell>{landlord.firstName}</TableCell>
+        <TableCell>{landlord.lastName}</TableCell>
+        <TableCell>{landlord.email || 'N/A'}</TableCell>
+        <TableCell>{landlord.phoneNumber}</TableCell>
+        <TableCell>{landlord.status}</TableCell>
+        <TableCell>{formatDate(landlord.createdAt)}</TableCell>
+      </TableRow>
+    );
+  }).filter(Boolean)}
+</TableBody>
+              
               </Table>
             </TableContainer>
           )}

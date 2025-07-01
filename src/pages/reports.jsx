@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import {
   Tabs,
   Tab,
@@ -13,28 +13,26 @@ import {
   Paper,
   Button,
   LinearProgress,
-  ThemeProvider,
   Snackbar,
   Alert,
   Container,
 } from '@mui/material';
 import axios from 'axios';
-import { useAuthStore } from '../store/authStore'; // Adjust path if needed
+import { useAuthStore } from '../store/authStore';
 import { useNavigate } from 'react-router-dom';
-import { getTheme } from '../store/theme'; // Adjust path if needed
+import { getTheme } from '../store/theme';
 import TitleComponent from '../components/title';
 
 const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
-const reportData = {
 
- 
+const reportData = {
   customers: [
-    { name: 'All Customers', description: 'List of all active customers', endpoint: `${BASEURL}/reports/customers` },
-    { name: 'Dormant Customers', description: 'Customers with no recent activity', endpoint: `${BASEURL}/reports/dormant` },
+    { name: 'All Tenants', description: 'List of all Tenants customers', endpoint: `${BASEURL}/reports/customers` },
+    { name: 'Dormant Tenants', description: 'Tenants with no recent activity', endpoint: `${BASEURL}/reports/dormant` },
     {
-      name: 'Customers by Collection Day',
-      description: 'Customers categorized by day of service',
-      endpoint: `${BASEURL}/reports/customer-per-collection-day`,
+      name: 'Tenants by landlord',
+      description: 'Tenants categorized by the landlord',
+      endpoint: `${BASEURL}/reports/tenant-per-landlord`,
     },
   ],
   invoices: [
@@ -57,18 +55,34 @@ const reportData = {
     { name: 'All Receipts', description: 'All issued receipts', endpoint: `${BASEURL}/reports/receipts` },
     { name: 'Income Report', description: 'Total income summary', endpoint: `${BASEURL}/reports/income` },
   ],
+  landlordSummaries: [
+    {
+      name: 'Total Rent per Landlord',
+      description: 'Total rent collected per landlord',
+      endpoint: `${BASEURL}/reports/landlord-rent`,
+    },
+    {
+      name: 'Income per Building',
+      description: 'Income per building across all landlords',
+      endpoint: `${BASEURL}/reports/income-per-building`,
+    },
+    {
+      name: 'Income per Landlord',
+      description: 'Detailed income per landlord with building breakdown',
+      endpoint: `${BASEURL}/reports/income-per-landlord`,
+    },
+  ],
 };
 
 const ReportScreen = () => {
   const [activeTab, setActiveTab] = useState(0);
-  const [downloading, setDownloading] = useState({}); // Track downloading state per endpoint
-  const [progress, setProgress] = useState({}); // Track download progress per endpoint
+  const [downloading, setDownloading] = useState({});
+  const [progress, setProgress] = useState({});
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const theme = getTheme();
 
-  // Check if user is logged in
   useEffect(() => {
     if (!currentUser) {
       navigate('/login');
@@ -96,7 +110,7 @@ const ReportScreen = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `${reportName.toLowerCase().replace(/\s+/g, '-')}.pdf`); // Cleaner filename
+      link.setAttribute('download', `${reportName.toLowerCase().replace(/\s+/g, '-')}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -109,10 +123,6 @@ const ReportScreen = () => {
       setDownloading((prev) => ({ ...prev, [endpoint]: false }));
       setProgress((prev) => ({ ...prev, [endpoint]: 0 }));
     }
-  };
-
-  const handleCloseNotification = () => {
-    setNotification((prev) => ({ ...prev, open: false }));
   };
 
   const renderTabContent = (tabData) => (
@@ -157,49 +167,57 @@ const ReportScreen = () => {
   );
 
   return (
-   
-    <Container sx={{ width: '100%', ml:20}}>
-
-<Box >
+    <Container sx={{ width: '100%', ml: 20 }}>
+      <Box>
         <Typography variant="h5" gutterBottom>
-         <TitleComponent title="Reports Center" />
+          <TitleComponent title="Reports Center" />
         </Typography>
-        <Tabs
-          value={activeTab}
-          onChange={handleTabChange}
-          aria-label="report tabs"
-          sx={{
-            minWidth: 500,
-            maxWidth: 1200,
-            width: '100%',
-            color: theme.palette.primary.contrastText,
-            mb: 3,
-            border: `1px solid ${theme.palette.primary.light}`,
-            borderRadius: 2,
-            '& .MuiTab-root': { color: theme.palette.primary.contrastText },
-            '& .Mui-selected': { backgroundColor: theme.palette.greenAccent.main },
-          }}
-        >
-          <Tab label="Customers" />
-          <Tab label="Invoices" />
-          <Tab label="Payments" />
-        </Tabs>
-        <Box sx={{ mt: 2 }}>{activeTab === 0 && renderTabContent(reportData.customers)}
+       <Tabs
+  value={activeTab}
+  onChange={handleTabChange}
+  aria-label="report tabs"
+  variant="scrollable"
+  scrollButtons="auto"
+  sx={{
+    minWidth: 500,
+    maxWidth: 1200,
+    width: '100%',
+    color: theme.palette.primary.contrastText,
+    mb: 3,
+    border: `1px solid ${theme.palette.primary.light}`,
+    borderRadius: 2,
+    '& .MuiTab-root': { color: theme.palette.primary.contrastText },
+    '& .Mui-selected': { backgroundColor: theme.palette.greenAccent.main },
+  }}
+>
+  <Tab label="Customers" />
+  <Tab label="Invoices" />
+  <Tab label="Payments" />
+  <Tab label="Landlord Summaries" />
+</Tabs>
+
+        <Box sx={{ mt: 2 }}>
+          {activeTab === 0 && renderTabContent(reportData.customers)}
           {activeTab === 1 && renderTabContent(reportData.invoices)}
-          {activeTab === 2 && renderTabContent(reportData.payments)}</Box>
+          {activeTab === 2 && renderTabContent(reportData.payments)}
+          {activeTab === 3 && renderTabContent(reportData.landlordSummaries)}
+        </Box>
       </Box>
       <Snackbar
         open={notification.open}
         autoHideDuration={6000}
-        onClose={handleCloseNotification}
+        onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={handleCloseNotification} severity={notification.severity} sx={{ width: '100%' }}>
+        <Alert
+          onClose={() => setNotification((prev) => ({ ...prev, open: false }))}
+          severity={notification.severity}
+          sx={{ width: '100%' }}
+        >
           {notification.message}
         </Alert>
       </Snackbar>
     </Container>
-  
   );
 };
 

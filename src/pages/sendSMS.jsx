@@ -162,23 +162,25 @@ function SmsScreen() {
           borderRadius: 2,
         }}
       >
-        <Tabs
-          value={tabValue}
-          onChange={handleTabChange}
-          centered
-          sx={{
-            mb: 3,
-            border: `1px solid ${theme.palette.primary.light}`,
-            borderRadius: 2,
-            '& .MuiTab-root': { color: theme.palette.primary.contrastText },
-            '& .Mui-selected': { color: theme.palette.primary.contrastText },
-          }}
-        >
-          <Tab label="Single SMS" />
-          <Tab label="New Customer SMS" />
-          <Tab label="All Customers" />
-          <Tab label="Group SMS" />
-        </Tabs>
+      <Tabs
+  value={tabValue}
+  onChange={handleTabChange}
+  variant="scrollable"
+  scrollButtons="auto"
+  aria-label="sms tabs"
+  sx={{
+    mb: 3,
+    border: `1px solid ${theme.palette.primary.light}`,
+    borderRadius: 2,
+    '& .MuiTab-root': { color: theme.palette.primary.contrastText },
+    '& .Mui-selected': { color: theme.palette.primary.contrastText },
+  }}
+>
+  <Tab label="Single SMS" />
+  <Tab label="New Customer SMS" />
+  <Tab label="All Customers" />
+  <Tab label="Group SMS" />
+</Tabs>
 
         <Box>
           {tabValue === 0 && (

@@ -83,6 +83,7 @@ const BuildingsScreen = () => {
             buildingName: building.buildingName || building.name || 'Unnamed',
             address: building.address || '',
             unitCount: Number(building.unitCount ?? 0),
+            managementRate: Number(building.managementRate ?? 0),
             gasRate: Number(building.gasRate ?? 0),
             waterRate: Number(building.waterRate ?? 0),
             createdAt: building.createdAt ? new Date(building.createdAt).toISOString() : new Date().toISOString(),
@@ -192,6 +193,14 @@ const BuildingsScreen = () => {
       headerName: 'Total Units',
       width: 120,
       type: 'number',
+    },
+
+    {
+      field: 'managementRate',
+      headerName: 'Management Rate ($)',
+      width: 150,
+      type: 'number',
+
     },
     {
       field: 'occupiedUnits',

@@ -44,6 +44,8 @@ const ContinuousStepConnector = styled(StepConnector)(({ theme }) => ({
 }));
 
 // Error Boundary Component
+import PropTypes from 'prop-types';
+
 class ErrorBoundary extends Component {
   state = { hasError: false, error: null };
 
@@ -62,6 +64,10 @@ class ErrorBoundary extends Component {
     return this.props.children;
   }
 }
+
+ErrorBoundary.propTypes = {
+  children: PropTypes.node,
+};
 
 export default function CreateCustomerScreen() {
   const navigate = useNavigate();
@@ -320,19 +326,6 @@ export default function CreateCustomerScreen() {
     }
   };
 
-  const formatNumberWithCommas = (number) => {
-    if (!number && number !== 0) return '';
-    
-    const num = Number(number);
-  
-    if (isNaN(num)) return ''; // Safeguard in case input is not a number
-  
-    // Format with commas, no decimals
-    return num.toLocaleString('en-US', {
-      maximumFractionDigits: 0, // no decimals
-      minimumFractionDigits: 0
-    });
-  };
   
 
 
@@ -881,7 +874,7 @@ export default function CreateCustomerScreen() {
   return (
     <Box sx={{  minHeight: '100vh', p: 3,ml:5 }}>
       <Typography variant="h5" gutterBottom >
-        <TitleComponent title="Add Customer" />
+        <TitleComponent title="Add Tenant" />
       </Typography>
 
       <ErrorBoundary>

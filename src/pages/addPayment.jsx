@@ -143,7 +143,7 @@ const CreatePayment = () => {
 
     setIsProcessing(true);
     try {
-      const response = await axios.post(`${BASEURL}/manual-cash-payment`, payload, { withCredentials: true });
+      await axios.post(`${BASEURL}/manual-cash-payment`, payload, { withCredentials: true });
       setSnackbar({ open: true, message: "Payment created successfully", severity: "success" });
       setSelectedCustomer(null);
       setFormData({ totalAmount: "", modeOfPayment: "" });

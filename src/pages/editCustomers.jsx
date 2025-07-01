@@ -11,6 +11,15 @@ import {
   Snackbar,
   Alert,
   Paper,
+  Modal,
+  FormControl,
+  InputLabel,
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
 import axios from 'axios';
 import { getTheme } from '../store/theme';
@@ -20,7 +29,7 @@ const CustomerEditScreen = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const theme = getTheme();
-  const BASEURL = import.meta.env.VITE_BASE_URL || 'https://taqa.co.ke/api';
+  const BASEURL = import.meta.env.VITE_BASE_URL || 'http://localhost:3000/api';
   const [loading, setLoading] = useState(true);
   const [originalData, setOriginalData] = useState(null);
   const [customerData, setCustomerData] = useState({
@@ -32,41 +41,36 @@ const CustomerEditScreen = () => {
     nationalId: '',
     status: '',
     closingBalance: '',
+    leaseFileUrl: '',
   });
   const [snackbar, setSnackbar] = useState({
     open: false,
     message: '',
     severity: 'success',
   });
+  const [openLeaseModal, setOpenLeaseModal] = useState(false);
+  const [leaseFile, setLeaseFile] = useState(null);
+  const [sending, setSending] = useState(false);
+  const [openTerminateDialog, setOpenTerminateDialog] = useState(false);
 
-  // Format number with commas only for numbers >= 1000
   const formatNumberWithCommas = (number) => {
     if (!number && number !== 0) return '';
-    
     const num = Number(number);
-  
-    if (isNaN(num)) return ''; // Safeguard in case input is not a number
-  
-    // Format with commas, no decimals
+    if (isNaN(num)) return '';
     return num.toLocaleString('en-US', {
-      maximumFractionDigits: 0, // no decimals
-      minimumFractionDigits: 0
+      maximumFractionDigits: 0,
+      minimumFractionDigits: 0,
     });
   };
-  
 
-  // Remove commas and non-numeric characters for state and backend
   const cleanNumberInput = (value) => {
     if (!value) return '';
-    // Remove all non-numeric characters except decimal point and minus sign
     const cleaned = value.replace(/[^0-9.-]/g, '');
-    // Ensure only one decimal point and valid number format
     const parts = cleaned.split('.');
     if (parts.length > 2) return parts[0] + '.' + parts[1];
     return cleaned;
   };
 
-  // Fetch customer data on mount
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -75,7 +79,6 @@ const CustomerEditScreen = () => {
         });
         const fetchedData = customerResponse.data;
 
-        // Normalize data
         const normalizedData = {
           firstName: fetchedData.firstName || '',
           lastName: fetchedData.lastName || '',
@@ -88,6 +91,7 @@ const CustomerEditScreen = () => {
             fetchedData.closingBalance !== null && fetchedData.closingBalance !== undefined
               ? fetchedData.closingBalance.toString()
               : '',
+          leaseFileUrl: fetchedData.leaseFileUrl || '',
         };
 
         setCustomerData(normalizedData);
@@ -106,7 +110,6 @@ const CustomerEditScreen = () => {
     fetchData();
   }, [id, BASEURL]);
 
-  // Handle input changes
   const handleChange = (e) => {
     const { name, value } = e.target;
     if (name === 'closingBalance') {
@@ -123,7 +126,6 @@ const CustomerEditScreen = () => {
     }
   };
 
-  // Get changed fields and convert types
   const getChangedFields = () => {
     const changedFields = {};
     for (const key in customerData) {
@@ -138,7 +140,6 @@ const CustomerEditScreen = () => {
     return changedFields;
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -176,9 +177,138 @@ const CustomerEditScreen = () => {
     }
   };
 
+  const handleLeaseUpload = async () => {
+    if (!leaseFile) {
+      setSnackbar({
+        open: true,
+        message: 'Please select a PDF file to upload.',
+        severity: 'error',
+      });
+      return;
+    }
+    if (leaseFile.type !== 'application/pdf') {
+      setSnackbar({
+        open: true,
+        message: 'Only PDF files are allowed.',
+        severity: 'error',
+      });
+      return;
+    }
+    if (leaseFile.size > 5 * 1024 * 1024) {
+      setSnackbar({
+        open: true,
+        message: 'File size exceeds 5MB.',
+        severity: 'error',
+      });
+      return;
+    }
+    setSending(true);
+    try {
+      const formData = new FormData();
+      formData.append('leaseFile', leaseFile);
+      formData.append('customerId', id);
+
+      await axios.post(`${BASEURL}/upload-lease`, formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setCustomerData((prev) => ({
+        ...prev,
+        leaseFileUrl: `Uploads/leases/${leaseFile.name}`,
+      }));
+      setOriginalData((prev) => ({
+        ...prev,
+        leaseFileUrl: `Uploads/leases/${leaseFile.name}`,
+      }));
+      setLeaseFile(null);
+      setOpenLeaseModal(false);
+      setSnackbar({
+        open: true,
+        message: 'Lease uploaded successfully',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Error uploading lease:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to upload lease agreement.',
+        severity: 'error',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleLeaseDownload = async () => {
+    setSending(true);
+    try {
+      const response = await axios.get(`${BASEURL}/download-lease/${id}`, {
+        withCredentials: true,
+        responseType: 'blob',
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `lease_${customerData.firstName}_${customerData.lastName}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      setSnackbar({
+        open: true,
+        message: 'Lease downloaded successfully',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Error downloading lease:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to download lease agreement.',
+        severity: 'error',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleTerminateLease = () => {
+    setOpenTerminateDialog(true);
+  };
+
+  const confirmTerminateLease = async () => {
+    setSending(true);
+    try {
+      await axios.post(`${BASEURL}/terminate-lease/${id}`, {}, { withCredentials: true });
+      setCustomerData((prev) => ({
+        ...prev,
+        leaseFileUrl: '',
+      }));
+      setOriginalData((prev) => ({
+        ...prev,
+        leaseFileUrl: '',
+      }));
+      setOpenLeaseModal(false);
+      setOpenTerminateDialog(false);
+      setSnackbar({
+        open: true,
+        message: 'Lease terminated successfully',
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Error terminating lease:', error);
+      setSnackbar({
+        open: true,
+        message: error.response?.data?.message || 'Failed to terminate lease.',
+        severity: 'error',
+      });
+    } finally {
+      setSending(false);
+    }
+  };
+
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
-    if (snackbar.severity === 'success') {
+    if (snackbar.severity === 'success' && !openLeaseModal && !openTerminateDialog) {
       navigate('/customers');
     }
   };
@@ -264,8 +394,6 @@ const CustomerEditScreen = () => {
               value={formatNumberWithCommas(customerData.closingBalance)}
               onChange={handleChange}
               fullWidth
-              
-            
             />
           </Box>
           <Box sx={{ mt: 3 }}>
@@ -273,22 +401,138 @@ const CustomerEditScreen = () => {
               type="submit"
               variant="contained"
               color="primary"
-              disabled={loading}
+              disabled={loading || sending}
               sx={{ mr: 2, backgroundColor: theme.palette.greenAccent.main }}
             >
               {loading ? 'Updating...' : 'Update Customer'}
             </Button>
             <Button
+              variant="contained"
+              onClick={() => setOpenLeaseModal(true)}
+              disabled={loading || sending}
+              sx={{ mr: 2, backgroundColor: theme.palette.greenAccent.main }}
+            >
+              Manage Lease
+            </Button>
+            <Button
               variant="outlined"
               color="secondary"
               onClick={() => navigate('/customers')}
-              disabled={loading}
+              disabled={loading || sending}
             >
               Cancel
             </Button>
           </Box>
         </form>
       </Paper>
+
+      <Modal open={openLeaseModal} onClose={() => setOpenLeaseModal(false)}>
+        <Box
+          sx={{
+            p: 4,
+            bgcolor: 'background.paper',
+            borderRadius: 2,
+            width: 400,
+            mx: 'auto',
+            mt: '10%',
+          }}
+        >
+          <Typography variant="h6" gutterBottom>
+            Manage Lease
+          </Typography>
+          {snackbar.open && openLeaseModal && (
+            <Alert severity={snackbar.severity} sx={{ mb: 2 }} onClose={handleCloseSnackbar}>
+              {snackbar.message}
+            </Alert>
+          )}
+          {!customerData.leaseFileUrl ? (
+            <>
+              <Typography variant="body1" mb={2}>
+                No lease agreement found. Upload a new lease agreement (PDF only, max 5MB).
+              </Typography>
+              <FormControl fullWidth sx={{ mb: 2 }}>
+                <InputLabel shrink htmlFor="lease-upload">
+                  Upload Lease Agreement
+                </InputLabel>
+                <input
+                  type="file"
+                  accept=".pdf"
+                  onChange={(e) => setLeaseFile(e.target.files[0])}
+                  id="lease-upload"
+                  style={{ marginTop: '16px' }}
+                />
+              </FormControl>
+              <Stack direction="row" spacing={2}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleLeaseUpload}
+                  disabled={sending || !leaseFile}
+                >
+                  {sending ? 'Uploading...' : 'Upload Lease'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setOpenLeaseModal(false)}
+                  disabled={sending}
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            </>
+          ) : (
+            <>
+              <Typography variant="body1" mb={2}>
+                Lease agreement exists. You can download or terminate the lease.
+              </Typography>
+              <Stack direction="row" spacing={2}>
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={handleLeaseDownload}
+                  disabled={sending}
+                >
+                  {sending ? 'Downloading...' : 'Download Lease'}
+                </Button>
+                <Button
+                  variant="contained"
+                  color="error"
+                  onClick={handleTerminateLease}
+                  disabled={sending}
+                >
+                  {sending ? 'Processing...' : 'Terminate Lease'}
+                </Button>
+                <Button
+                  variant="outlined"
+                  onClick={() => setOpenLeaseModal(false)}
+                  disabled={sending}
+                  color={theme.palette.secondary.contrastText}
+                >
+                  Cancel
+                </Button>
+              </Stack>
+            </>
+          )}
+        </Box>
+      </Modal>
+
+      <Dialog open={openTerminateDialog} onClose={() => setOpenTerminateDialog(false)}>
+        <DialogTitle>Confirm Lease Termination</DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            Are you sure you want to terminate the lease for {customerData.firstName} {customerData.lastName}?
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setOpenTerminateDialog(false)} disabled={sending}>
+            Cancel
+          </Button>
+          <Button onClick={confirmTerminateLease} color="error" disabled={sending}>
+            {sending ? 'Terminating...' : 'Terminate'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       <Snackbar
         open={snackbar.open}
         autoHideDuration={3000}

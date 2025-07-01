@@ -50,6 +50,7 @@ const CreatePropertyAndUnitsScreen = () => {
     name: '',
     address: '',
     unitCount: '',
+    managementRate: '',
     gasRate: '',
     waterRate: '',
   });
@@ -130,6 +131,9 @@ const CreatePropertyAndUnitsScreen = () => {
     if (buildingForm.unitCount && (isNaN(buildingForm.unitCount) || buildingForm.unitCount < 0)) {
       newErrors.unitCount = 'Must be a non-negative number';
     }
+    if (buildingForm.managementRate && (isNaN(buildingForm.managementRate) || buildingForm.managementRate < 0)) {
+      newErrors.managementRate = 'Must be a non-negative number';
+    }
     if (buildingForm.gasRate && (isNaN(buildingForm.gasRate) || buildingForm.gasRate < 0)) {
       newErrors.gasRate = 'Must be a non-negative number';
     }
@@ -184,6 +188,7 @@ const CreatePropertyAndUnitsScreen = () => {
         address: '',
         unitCount: '',
         gasRate: '',
+        managementRate: '',
         waterRate: '',
       });
       setErrors((prev) => ({ ...prev, building: {} }));
@@ -364,6 +369,21 @@ const CreatePropertyAndUnitsScreen = () => {
                     variant="outlined"
                     size="small"
                     margin="normal"
+                  />
+
+                  <TextField
+                    fullWidth
+                    label="Management Rate ($)"
+                    name="managementRate"
+                    type="number"
+                    value={buildingForm.managementRate}
+                    onChange={handleBuildingChange}
+                    error={!!errors.building.managementRate}
+                    helperText={errors.building.managementRate}
+                    variant="outlined"
+                    size="small"
+                    margin="normal"
+                    inputProps={{ step: '0.01' }}
                   />
                   <TextField
                     fullWidth
