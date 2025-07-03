@@ -50,6 +50,8 @@ import LandlordDetailsScreen from "./pages/landlordDetails";
 import EditBuildingScreen from "./pages/editBuilding";
 import WaterReadingsList from "./pages/waterReadings";
 import MeterReadingDetails from "./pages/meterReadingDetails";
+import AddPropertyScreen from "./pages/addProperty";
+import AddUnitScreen from "./pages/addUnit";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -123,10 +125,20 @@ const App = () => {
                   path="/add-property"
                   element={
                     <ProtectedRoute>
-                      <CreatePropertyAndUnitsScreen />
+                      <AddPropertyScreen />
                     </ProtectedRoute>
                   }
                 /> 
+              
+                <Route
+                  path="/add-unit/:buildingId"
+                  element={
+                    <ProtectedRoute>
+                      <AddUnitScreen />
+                    </ProtectedRoute>
+                  }
+                  />
+
 
 
 

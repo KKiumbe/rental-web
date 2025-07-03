@@ -1,5 +1,4 @@
-
-import  { useEffect, useState, Component } from 'react';
+import { useEffect, useState, Component } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -23,11 +22,20 @@ import {
   Select,
   InputLabel,
   FormControl,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Snackbar,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import VisibilityIcon from '@mui/icons-material/Visibility';
+import EditIcon from '@mui/icons-material/Edit';
+import PropTypes from 'prop-types';
+
+// Assuming TitleComponent and theme/auth imports are correctly set up
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
-import VisibilityIcon from '@mui/icons-material/Visibility';
 import { useAuthStore } from '../store/authStore';
 
 // Error Boundary Component
@@ -50,11 +58,17 @@ class ErrorBoundary extends Component {
   }
 }
 
+ErrorBoundary.propTypes = {
+  children: PropTypes.node,
+};
+
+// Define unitColumns for the DataGrid
+
 const BuildingDetailsScreen = () => {
   const [building, setBuilding] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [openModal, setOpenModal] = useState(false); // State for modal
+  const [openModal, setOpenModal] = useState(false);
   const [unitForm, setUnitForm] = useState({
     buildingId: '',
     unitNumber: '',
@@ -64,12 +78,45 @@ const BuildingDetailsScreen = () => {
     serviceCharge: '',
     status: 'VACANT',
   });
-  const [formError, setFormError] = useState(''); // State for form errors
+  const [formError, setFormError] = useState('');
+  const [unitCustomers, setUnitCustomers] = useState([]);
+  const [editUnitOpen, setEditUnitOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    unitNumber: '',
+    monthlyCharge: 0,
+    depositAmount: 0,
+    garbageCharge: 0,
+    serviceCharge: 0,
+    securityCharge: 0,
+    amenitiesCharge: 0,
+    backupGeneratorCharge: 0,
+    status: 'VACANT',
+  });
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [unitsLoading, setUnitsLoading] = useState(false);
+   const [viewUnitOpen, setViewUnitOpen] = useState(false);
+     const [selectedUnit, setSelectedUnit] = useState(null);
   const { id } = useParams();
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
-  const theme = getTheme();
-  const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://taqa.co.ke/api';
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
+
+  // Sanitize building object
+  const sanitizedBuilding = building
+    ? {
+        ...building,
+        landlord: building.landlord || { name: '', email: '', phoneNumber: '' },
+        units: Array.isArray(building.units) ? building.units : [],
+        customers: Array.isArray(building.customers) ? building.customers : [],
+        unitCount: building.unitCount || (Array.isArray(building.units) ? building.units.length : 0),
+        customerCount: building.customerCount || (Array.isArray(building.customers) ? building.customerCount : 0),
+        managementRate: typeof building.managementRate === 'number' ? building.managementRate : 0,
+        gasRate: typeof building.gasRate === 'number' ? building.gasRate : 0,
+        waterRate: typeof building.waterRate === 'number' ? building.waterRate : 0,
+        createdAt: building.createdAt || new Date().toISOString(),
+      }
+    : null;
 
   useEffect(() => {
     if (!currentUser) {
@@ -83,9 +130,7 @@ const BuildingDetailsScreen = () => {
       const response = await axios.get(`${BASE_URL}/buildings/${id}`, {
         withCredentials: true,
       });
-      console.log('Fetched building:', JSON.stringify(response.data));
       setBuilding(response.data);
-      // Set buildingId in unitForm when building data is fetched
       setUnitForm((prev) => ({ ...prev, buildingId: response.data.id || id }));
     } catch (err) {
       console.error('Fetch building error:', err);
@@ -101,23 +146,88 @@ const BuildingDetailsScreen = () => {
     }
   };
 
-  useEffect(() => {
-    if (id) {
-      fetchBuilding();
-    }
-  }, [id]);
 
-  // Handle opening and closing the modal
-  const handleAddUnit = () => {
-    setOpenModal(true);
+const fetchUnit = async (id) => {
+  try {
+    setUnitsLoading(true);
+
+    // Fetch unit details
+    const unitResponse = await axios.get(`${BASE_URL}/units/${id}`, { withCredentials: true });
+    const unitData = unitResponse.data?.data;
+    if (!unitData) throw new Error('No unit data returned');
+
+    setSelectedUnit(unitData);
+    setEditFormData({
+      unitNumber: unitData.unitNumber || '',
+      monthlyCharge: Number(unitData.monthlyCharge) || 0,
+      depositAmount: Number(unitData.depositAmount) || 0,
+      garbageCharge: Number(unitData.garbageCharge) || 0,
+      serviceCharge: Number(unitData.serviceCharge) || 0,
+      securityCharge: Number(unitData.securityCharge) || 0,
+      amenitiesCharge: Number(unitData.amenitiesCharge) || 0,
+      backupGeneratorCharge: Number(unitData.backupGeneratorCharge) || 0,
+      status: unitData.status || 'VACANT',
+    });
+
+    // Fetch customers of this unit
+    const customersResponse = await axios.get(`${BASE_URL}/units/${id}/customers`, {
+      withCredentials: true,
+    });
+    setUnitCustomers(customersResponse.data?.data || []);
+
+  } catch (err) {
+    console.error('Fetch unit error:', err);
+    setSnackbarMessage(err.response?.data?.error || 'Failed to fetch unit details');
+    setSnackbarOpen(true);
+    setSelectedUnit(null);
+    setUnitCustomers([]);
+  } finally {
+    setUnitsLoading(false);
+  }
+};
+
+
+
+
+  const handleFormChange = (e) => {
+    const { name, value } = e.target;
+    setUnitForm((prev) => ({
+      ...prev,
+      [name]: name === 'status' ? value : name.includes('Charge') || name === 'depositAmount' ? parseFloat(value) || '' : value,
+    }));
   };
+    const handleViewUnit = (unit) => {
+    fetchUnit(unit.id);
+    setViewUnitOpen(true);
+  };
+
+  const handleInputChange = (e) => {
+    const { name, value } = e.target;
+    setEditFormData((prev) => ({
+      ...prev,
+      [name]: name === 'status' ? value : name.includes('Charge') || name === 'depositAmount' ? parseFloat(value) || 0 : value,
+    }));
+  };
+
+const handleAddUnit = () => {
+  if (!building || !building.id) {
+    console.warn('No building selected for adding unit');
+    setSnackbarMessage('Please select a building first');
+    setSnackbarOpen(true);
+    return;
+  }
+
+  
+  console.log(`Navigating to /add-unit/${building}`);
+  navigate(`/add-unit/${building.id || id}`);
+};
+
 
   const handleCloseModal = () => {
     setOpenModal(false);
     setFormError('');
-    // Reset form fields, but keep buildingId
     setUnitForm({
-      buildingId: unitForm.buildingId,
+      buildingId: building?.id || id,
       unitNumber: '',
       monthlyCharge: '',
       depositAmount: '',
@@ -127,38 +237,27 @@ const BuildingDetailsScreen = () => {
     });
   };
 
-  // Handle form input changes
-  const handleFormChange = (e) => {
-    const { name, value } = e.target;
-    setUnitForm((prev) => ({ ...prev, [name]: value }));
+  
+
+    const handleCloseViewUnit = () => {
+    setViewUnitOpen(false);
+    setSelectedUnit(null);
   };
 
-  // Handle form submission
   const handleFormSubmit = async (e) => {
     e.preventDefault();
-    // Basic validation
-    if (
-      !unitForm.unitNumber ||
-      !unitForm.monthlyCharge ||
-      !unitForm.depositAmount ||
-      !unitForm.garbageCharge ||
-      !unitForm.serviceCharge
-    ) {
-      setFormError('All fields are required except status.');
-      return;
-    }
-    // Validate numeric fields
-    if (
-      isNaN(unitForm.monthlyCharge) ||
-      isNaN(unitForm.depositAmount) ||
-      isNaN(unitForm.garbageCharge) ||
-      isNaN(unitForm.serviceCharge)
-    ) {
-      setFormError('Charges must be valid numbers.');
-      return;
-    }
+    setFormError('');
     try {
-      // Ensure numeric fields are sent as numbers
+      if (
+        !unitForm.unitNumber ||
+        !unitForm.monthlyCharge ||
+        !unitForm.depositAmount ||
+        !unitForm.garbageCharge ||
+        !unitForm.serviceCharge
+      ) {
+        setFormError('Please fill in all required fields.');
+        return;
+      }
       const payload = {
         buildingId: unitForm.buildingId,
         unitNumber: unitForm.unitNumber,
@@ -168,94 +267,77 @@ const BuildingDetailsScreen = () => {
         serviceCharge: Number(unitForm.serviceCharge),
         status: unitForm.status,
       };
-      await axios.post(`${BASE_URL}/create-unit`, payload, {
+      await axios.post(`${BASE_URL}/units`, payload, {
         withCredentials: true,
       });
+      setSnackbarMessage('Unit added successfully.');
+      setSnackbarOpen(true);
       handleCloseModal();
-      fetchBuilding(); // Refresh building data to include the new unit
+      fetchBuilding();
     } catch (err) {
-      console.error('Create unit error:', err);
-      setFormError('Failed to create unit. Please try again.');
+      console.error('Add unit error:', err);
+      setFormError(err.response?.data?.error || 'Failed to add unit. Please try again.');
     }
   };
 
-  // Sanitize building data
-  const sanitizeBuilding = (data) => {
-    if (!data || typeof data !== 'object') {
-      console.warn('Invalid building data:', data);
-      return null;
-    }
-    const sanitized = {
-      id: data.id || '',
-      name: data.name || data.buildingName || 'Unnamed',
-      buildingName: data.buildingName || data.name || 'Unnamed',
-      address: data.address || 'N/A',
-      unitCount: Number(data.unitCount ?? 0),
-      managementRate: Number(data.managementRate ?? 0),
-      gasRate: Number(data.gasRate ?? 0),
-      waterRate: Number(data.waterRate ?? 0),
-      createdAt: data.createdAt ? new Date(data.createdAt).toISOString() : new Date().toISOString(),
-      landlord: data.landlord
-        ? {
-            name: data.landlord.name || `${data.landlord.firstName || ''} ${data.landlord.lastName || ''}`.trim() || 'Unknown',
-            email: data.landlord.email || 'N/A',
-            phoneNumber: data.landlord.phoneNumber || 'N/A',
-          }
-        : { name: 'Unknown', email: 'N/A', phoneNumber: 'N/A' },
-      units: Array.isArray(data.units)
-        ? data.units.map((unit) => ({
-            id: unit.id || '',
-            unitNumber: unit.unitNumber || 'Unknown',
-            monthlyCharge: Number(unit.monthlyCharge ?? 0),
-            depositAmount: Number(unit.depositAmount ?? 0),
-            garbageCharge: Number(unit.garbageCharge ?? 0),
-            serviceCharge: Number(unit.serviceCharge ?? 0),
-            status: unit.status || 'UNKNOWN',
-            customerCount: Number(unit.customerCount ?? unit.customers?.length ?? 0),
-            customers: Array.isArray(unit.customers)
-              ? unit.customers.map((customer) => ({
-                  id: customer.id || '',
-                  firstName: customer.firstName || 'Unknown',
-                  lastName: customer.lastName || 'Unknown',
-                  email: customer.email || 'N/A',
-                  phoneNumber: customer.phoneNumber || 'N/A',
-                  secondaryPhoneNumber: customer.secondaryPhoneNumber || 'N/A',
-                  nationalId: customer.nationalId || 'N/A',
-                  status: customer.status || 'UNKNOWN',
-                  closingBalance: Number(customer.closingBalance ?? 0),
-                  leaseFileUrl: customer.leaseFileUrl || null,
-                  createdAt: customer.createdAt ? new Date(customer.createdAt).toISOString() : new Date().toISOString(),
-                }))
-              : [],
-            createdAt: unit.createdAt ? new Date(unit.createdAt).toISOString() : new Date().toISOString(),
-          }))
-        : [],
-      customers: Array.isArray(data.units)
-        ? data.units // Fixed: Changed dataunits to data.units
-            .flatMap((unit) =>
-              Array.isArray(unit.customers)
-                ? unit.customers.map((customer) => ({
-                    id: customer.id || '',
-                    firstName: customer.firstName || 'Unknown',
-                    lastName: customer.lastName || 'Unknown',
-                    email: customer.email || 'N/A',
-                    phoneNumber: customer.phoneNumber || 'N/A',
-                    secondaryPhoneNumber: customer.secondaryPhoneNumber || 'N/A',
-                    nationalId: customer.nationalId || 'N/A',
-                    status: customer.status || 'UNKNOWN',
-                    closingBalance: Number(customer.closingBalance ?? 0),
-                    leaseFileUrl: customer.leaseFileUrl || null,
-                    unitNumber: unit.unitNumber || 'Unknown',
-                    createdAt: customer.createdAt ? new Date(customer.createdAt).toISOString() : new Date().toISOString(),
-                  }))
-                : []
-            )
-        : [],
-      customerCount: Number(data.customerCount ?? data.units?.reduce((sum, unit) => sum + (unit.customers?.length || 0), 0) ?? 0),
-    };
-    console.log('Sanitized building:', JSON.stringify(sanitized));
-    return sanitized;
+
+  const handleEditUnit = (unit) => {
+    fetchUnit(unit.id);
+    setEditUnitOpen(true);
   };
+
+  const handleCloseEditUnit = () => {
+    setEditUnitOpen(false);
+    setEditFormData({
+      unitNumber: '',
+      monthlyCharge: 0,
+      depositAmount: 0,
+      garbageCharge: 0,
+      serviceCharge: 0,
+      securityCharge: 0,
+      amenitiesCharge: 0,
+      backupGeneratorCharge: 0,
+      status: 'VACANT',
+    });
+  };
+
+  const handleUpdateUnit = async () => {
+    setUnitsLoading(true);
+    try {
+      const unit = building?.units?.find((u) => u.unitNumber === editFormData.unitNumber);
+      if (!unit) {
+        setSnackbarMessage('Unit not found for update.');
+        setSnackbarOpen(true);
+        setUnitsLoading(false);
+        return;
+      }
+      const payload = {
+        unitNumber: editFormData.unitNumber,
+        monthlyCharge: Number(editFormData.monthlyCharge),
+        depositAmount: Number(editFormData.depositAmount),
+        garbageCharge: Number(editFormData.garbageCharge),
+        serviceCharge: Number(editFormData.serviceCharge),
+        securityCharge: Number(editFormData.securityCharge),
+        amenitiesCharge: Number(editFormData.amenitiesCharge),
+        backupGeneratorCharge: Number(editFormData.backupGeneratorCharge),
+        status: editFormData.status,
+      };
+      await axios.put(`${BASE_URL}/units/${unit.id}`, payload, {
+        withCredentials: true,
+      });
+      setSnackbarMessage('Unit updated successfully.');
+      setSnackbarOpen(true);
+      handleCloseEditUnit();
+      fetchBuilding();
+    } catch (err) {
+      console.error('Update unit error:', err);
+      setSnackbarMessage('Failed to update unit. Please try again.');
+      setSnackbarOpen(true);
+    } finally {
+      setUnitsLoading(false);
+    }
+  };
+
 
   const unitColumns = [
     {
@@ -263,88 +345,53 @@ const BuildingDetailsScreen = () => {
       headerName: 'View',
       width: 80,
       renderCell: (params) => (
-        <IconButton component={Link} to={`/unit-details/${params.row.id}`}>
+        <IconButton onClick={() => handleViewUnit(params.row)}>
           <VisibilityIcon />
         </IconButton>
       ),
     },
-    { field: 'unitNumber', headerName: 'Unit Number', width: 120 },
     {
-      field: 'monthlyCharge',
-      headerName: 'Monthly Charge ($)',
-      width: 150,
-      type: 'number',
-      valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
-    },
-    {
-      field: 'depositAmount',
-      headerName: 'Deposit Amount ($)',
-      width: 150,
-      type: 'number',
-      valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
-    },
-    {
-      field: 'garbageCharge',
-      headerName: 'Garbage Charge ($)',
-      width: 150,
-      type: 'number',
-      valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
-    },
-    {
-      field: 'serviceCharge',
-      headerName: 'Service Charge ($)',
-      width: 150,
-      type: 'number',
-      valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
-    },
-    { field: 'status', headerName: 'Status', width: 120 },
-    { field: 'customerCount', headerName: 'Customers', width: 100, type: 'number' },
-    {
-      field: 'createdAt',
-      headerName: 'Created At',
-      width: 150,
-      type: 'dateTime',
-      valueFormatter: ({ value }) =>
-        new Date(value).toLocaleDateString('en-US', {
-          year: 'numeric',
-          month: 'short',
-          day: 'numeric',
-        }),
-    },
-  ];
-
-  const customerColumns = [
-    {
-      field: 'actions',
-      headerName: 'View',
+      field: 'edit',
+      headerName: 'Edit',
       width: 80,
       renderCell: (params) => (
-        <IconButton component={Link} to={`/customer-details/${params.row.id}`}>
-          <VisibilityIcon />
+        <IconButton onClick={() => handleEditUnit(params.row)} title="Edit Unit">
+          <EditIcon />
         </IconButton>
       ),
     },
-    { field: 'firstName', headerName: 'First Name', width: 120 },
-    { field: 'lastName', headerName: 'Last Name', width: 120 },
-    { field: 'unitNumber', headerName: 'Unit Number', width: 120 },
-    { field: 'email', headerName: 'Email', width: 150 },
-    { field: 'phoneNumber', headerName: 'Phone Number', width: 130 },
-    { field: 'secondaryPhoneNumber', headerName: 'Secondary Phone', width: 130 },
-    { field: 'nationalId', headerName: 'National ID', width: 130 },
-    {
-      field: 'closingBalance',
-      headerName: 'Closing Balance ($)',
-      width: 150,
-      type: 'number',
-      valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
-    },
-    { field: 'status', headerName: 'Status', width: 100 },
-  ];
 
-  const sanitizedBuilding = building ? sanitizeBuilding(building) : null;
+  { field: 'unitNumber', headerName: 'Unit Number', width: 150 },
+  { field: 'monthlyCharge', headerName: 'Monthly Charge ($)', width: 150 },
+  { field: 'depositAmount', headerName: 'Deposit Amount ($)', width: 150 },
+  { field: 'garbageCharge', headerName: 'Garbage Charge ($)', width: 150 },
+  { field: 'serviceCharge', headerName: 'Service Charge ($)', width: 150 },
+  {
+    field: 'status',
+    headerName: 'Status',
+    width: 120,
+    renderCell: (params) => (
+      <Typography color={params.value === 'OCCUPIED' ? 'green' : 'orange'}>
+        {params.value}
+      </Typography>
+    ),
+  },
+
+];
+
+// Customer columns (already defined in the original code)
+
+
+
+
+  useEffect(() => {
+    if (id) {
+      fetchBuilding();
+    }
+  }, [id]);
 
   return (
-    <Box sx={{ bgcolor: theme?.palette?.background?.paper, minHeight: '100vh', p: 3 }}>
+    <Box sx={{  minHeight: '100vh', p: 3 }}>
       <Typography variant="h5" gutterBottom sx={{ ml: 5 }}>
         <TitleComponent title="Building Details" />
       </Typography>
@@ -398,14 +445,15 @@ const BuildingDetailsScreen = () => {
               <Typography variant="h6" gutterBottom>
                 Units ({sanitizedBuilding.units.length})
               </Typography>
-              <Button
-                variant="contained"
-                startIcon={<AddIcon />}
-                onClick={handleAddUnit}
-                sx={{ backgroundColor: theme?.palette?.greenAccent?.main, color: '#fff' }}
-              >
-                Add Unit
-              </Button>
+             <Button
+  variant="contained"
+  color="primary"
+  onClick={handleAddUnit}
+  disabled={!building?.id}
+>
+  Add Unit
+</Button>
+
             </Box>
             <Paper sx={{ width: '100%', mb: 4 }}>
               <DataGrid
@@ -418,8 +466,8 @@ const BuildingDetailsScreen = () => {
                 pageSizeOptions={[5, 10, 20]}
                 disableRowSelectionOnClick
                 autoHeight
-                components={{
-                  Toolbar: () => (
+                slots={{
+                  toolbar: () => (
                     <GridToolbarContainer>
                       <GridToolbarExport />
                     </GridToolbarContainer>
@@ -428,30 +476,33 @@ const BuildingDetailsScreen = () => {
               />
             </Paper>
 
-            {/* Customers DataGrid */}
-            <Typography variant="h6" gutterBottom>
-              Customers ({sanitizedBuilding.customerCount})
-            </Typography>
-            <Paper sx={{ width: '100%' }}>
-              <DataGrid
-                rows={sanitizedBuilding.customers}
-                columns={customerColumns}
-                getRowId={(row) => row.id}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 5 } },
-                }}
-                pageSizeOptions={[5, 10, 20]}
-                disableRowSelectionOnClick
-                autoHeight
-                components={{
-                  Toolbar: () => (
-                    <GridToolbarContainer>
-                      <GridToolbarExport />
-                    </GridToolbarContainer>
-                  ),
-                }}
-              />
-            </Paper>
+            {/* Customers Section */}
+
+            <Typography variant="subtitle1" sx={{ mt: 3 }}>
+  Customers in this Unit
+</Typography>
+{unitCustomers.length > 0 ? (
+  <DataGrid
+    rows={unitCustomers.map((c) => ({
+      ...c,
+      name: `${c.firstName} ${c.lastName}`,
+    }))}
+    columns={[
+      { field: 'name', headerName: 'Name', width: 180 },
+      { field: 'email', headerName: 'Email', width: 200 },
+      { field: 'phoneNumber', headerName: 'Phone Number', width: 160 },
+      { field: 'status', headerName: 'Status', width: 120 }
+    ]}
+    getRowId={(row) => row.id}
+    autoHeight
+    hideFooterPagination
+  />
+) : (
+  <Typography>No customers found for this unit.</Typography>
+)}
+
+            
+          
 
             {/* Add Unit Modal */}
             <Modal open={openModal} onClose={handleCloseModal}>
@@ -549,6 +600,142 @@ const BuildingDetailsScreen = () => {
                 </form>
               </Box>
             </Modal>
+
+            {/* Edit Unit Dialog */}
+            <Dialog open={editUnitOpen} onClose={handleCloseEditUnit} maxWidth="sm" fullWidth>
+              <DialogTitle>Edit Unit</DialogTitle>
+              <DialogContent>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                  <TextField
+                    label="Unit Number"
+                    name="unitNumber"
+                    value={editFormData.unitNumber}
+                    onChange={handleInputChange}
+                    required
+                    fullWidth
+                  />
+                  <TextField
+                    label="Monthly Charge ($)"
+                    name="monthlyCharge"
+                    type="number"
+                    value={editFormData.monthlyCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Deposit Amount ($)"
+                    name="depositAmount"
+                    type="number"
+                    value={editFormData.depositAmount}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Garbage Charge ($)"
+                    name="garbageCharge"
+                    type="number"
+                    value={editFormData.garbageCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Service Charge ($)"
+                    name="serviceCharge"
+                    type="number"
+                    value={editFormData.serviceCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Security Charge ($)"
+                    name="securityCharge"
+                    type="number"
+                    value={editFormData.securityCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Amenities Charge ($)"
+                    name="amenitiesCharge"
+                    type="number"
+                    value={editFormData.amenitiesCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <TextField
+                    label="Backup Generator Charge ($)"
+                    name="backupGeneratorCharge"
+                    type="number"
+                    value={editFormData.backupGeneratorCharge}
+                    onChange={handleInputChange}
+                    fullWidth
+                  />
+                  <FormControl fullWidth>
+                    <InputLabel>Status</InputLabel>
+                    <Select
+                      name="status"
+                      value={editFormData.status}
+                      onChange={handleInputChange}
+                      required
+                    >
+                      <MenuItem value="VACANT">Vacant</MenuItem>
+                      <MenuItem value="OCCUPIED">Occupied</MenuItem>
+                      <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
+                      <MenuItem value="OCCUPIED_PENDING_PAYMENT">Occupied Pending Payment</MenuItem>
+                    </Select>
+                  </FormControl>
+                </Box>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={handleUpdateUnit} variant="contained" color="primary" disabled={unitsLoading}>
+                  {unitsLoading ? 'Saving...' : 'Save'}
+                </Button>
+                <Button onClick={handleCloseEditUnit} disabled={unitsLoading}>
+                  Cancel
+                </Button>
+              </DialogActions>
+            </Dialog>
+
+
+            {/* View Unit Modal */}
+                  <Dialog open={viewUnitOpen} onClose={handleCloseViewUnit} maxWidth="sm" fullWidth>
+                    <DialogTitle>Unit Details</DialogTitle>
+                    <DialogContent>
+                      {selectedUnit ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                          <Typography><strong>Unit Number:</strong> {selectedUnit.unitNumber}</Typography>
+                          <Typography><strong>Monthly Charge:</strong> ${selectedUnit.monthlyCharge}</Typography>
+                          <Typography><strong>Deposit Amount:</strong> ${selectedUnit.depositAmount}</Typography>
+                          <Typography><strong>Garbage Charge:</strong> ${selectedUnit.garbageCharge || 'N/A'}</Typography>
+                          <Typography><strong>Service Charge:</strong> ${selectedUnit.serviceCharge || 'N/A'}</Typography>
+                          <Typography><strong>Security Charge:</strong> ${selectedUnit.securityCharge || 'N/A'}</Typography>
+                          <Typography><strong>Amenities Charge:</strong> ${selectedUnit.amenitiesCharge || 'N/A'}</Typography>
+                          <Typography><strong>Backup Generator Charge:</strong> ${selectedUnit.backupGeneratorCharge || 'N/A'}</Typography>
+                          <Typography><strong>Status:</strong> {selectedUnit.status}</Typography>
+                          <Typography><strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}</Typography>
+                          <Typography><strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}</Typography>
+                        </Box>
+                      ) : (
+                        <Typography>Loading unit details...</Typography>
+                      )}
+                    </DialogContent>
+                    <DialogActions>
+                      <Button onClick={() => { handleCloseViewUnit(); setEditUnitOpen(true); }} disabled={unitsLoading}>
+                        Edit
+                      </Button>
+                      <Button onClick={handleCloseViewUnit} disabled={unitsLoading}>
+                        Close
+                      </Button>
+                    </DialogActions>
+                  </Dialog>
+
+            {/* Snackbar */}
+            <Snackbar
+              open={snackbarOpen}
+              autoHideDuration={3000}
+              onClose={() => setSnackbarOpen(false)}
+              message={snackbarMessage}
+            />
           </Box>
         </ErrorBoundary>
       )}

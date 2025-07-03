@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Component } from 'react';
+import { useEffect, useState, Component } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -26,14 +26,17 @@ import {
   TableRow,
   IconButton,
   styled,
+  Alert,
+  Divider,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import DeleteIcon from '@mui/icons-material/Delete';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import TitleComponent from '../components/title';
 import { getTheme } from '../store/theme';
 import { useAuthStore } from '../store/authStore';
 
-// Custom Step Connector with Continuous Line
+// Custom Step Connector
 const ContinuousStepConnector = styled(StepConnector)(({ theme }) => ({
   '& .MuiStepConnector-line': {
     borderStyle: 'solid',
@@ -90,17 +93,21 @@ export default function CreateCustomerScreen() {
     invoiceItems: [{ description: '', amount: '', quantity: 1 }],
   });
   const [utilityReadings, setUtilityReadings] = useState([
-    { type: 'water', reading: '' }, // Default to water
+    { type: 'water', reading: '' },
   ]);
   const [buildings, setBuildings] = useState([]);
   const [units, setUnits] = useState([]);
   const [selectedBuildingId, setSelectedBuildingId] = useState('');
+  const [bulkBuildingId, setBulkBuildingId] = useState('');
+  const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [buildingsLoading, setBuildingsLoading] = useState(false);
   const [unitsLoading, setUnitsLoading] = useState(false);
+  const [bulkLoading, setBulkLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [errors, setErrors] = useState({});
+  const [bulkErrors, setBulkErrors] = useState([]);
 
   // Redirect to login if no user
   useEffect(() => {
@@ -210,20 +217,111 @@ export default function CreateCustomerScreen() {
     setUtilityReadings((prev) => prev.filter((_, i) => i !== index));
   };
 
-  // Handle building selection
+  // Handle building selection for single customer
   const handleBuildingChange = (e) => {
     const buildingId = e.target.value;
     setSelectedBuildingId(buildingId);
     setFormData((prev) => ({ ...prev, unitId: '' }));
   };
 
+  // Handle building selection for bulk upload
+  const handleBulkBuildingChange = (e) => {
+    setBulkBuildingId(e.target.value);
+  };
 
+  // Handle file selection for bulk upload
+  const handleFileChange = (e) => {
+    const selectedFile = e.target.files[0];
+    if (selectedFile && !['text/csv', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'].includes(selectedFile.type)) {
+      setSnackbarMessage('Invalid file type. Please upload a CSV or Excel file.');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (selectedFile && selectedFile.size > 5 * 1024 * 1024) {
+      setSnackbarMessage('File size exceeds 5MB limit.');
+      setSnackbarOpen(true);
+      return;
+    }
+    setFile(selectedFile);
+    setBulkErrors([]);
+  };
+
+  // Handle template download
+  const handleTemplateDownload = async (e) => {
+    e.preventDefault(); // Prevent React Router navigation
+    try {
+      const response = await fetch(`${BASE_URL}/templates/customers.csv`, { credentials: 'include' });
+      if (!response.ok) throw new Error('Template file not found');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'customers.csv';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setSnackbarMessage('Template downloaded successfully');
+      setSnackbarOpen(true);
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      setSnackbarMessage('Failed to download template. Please contact support.');
+      setSnackbarOpen(true);
+    }
+  };
+
+  // Handle bulk upload submission
+  const handleBulkUpload = async (e) => {
+    e.preventDefault();
+    if (!bulkBuildingId) {
+      setSnackbarMessage('Please select a building for bulk upload');
+      setSnackbarOpen(true);
+      return;
+    }
+    if (!file) {
+      setSnackbarMessage('Please select a file to upload');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('buildingId', bulkBuildingId);
+
+    setBulkLoading(true);
+    try {
+      const response = await axios.post(`${BASE_URL}/upload-customers-withbuildingId`, formData, {
+        withCredentials: true,
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      setSnackbarMessage(response.data.message || 'Bulk upload completed successfully');
+      setSnackbarOpen(true);
+      if (response.data.errors && response.data.errors.length > 0) {
+        setBulkErrors(response.data.errors);
+      }
+      setFile(null);
+      setBulkBuildingId('');
+    } catch (err) {
+      console.error('Error uploading file:', err);
+      setSnackbarMessage(
+        err.response?.data?.message || 'Failed to upload customers. Please try again.'
+      );
+      setSnackbarOpen(true);
+      if (err.response?.data?.errors) {
+        setBulkErrors(err.response.data.errors);
+      }
+    } finally {
+      setBulkLoading(false);
+    }
+  };
 
   // Validate customer form
   const validateCustomerForm = () => {
     const newErrors = {};
-    if (!formData.firstName) newErrors.firstName = 'First name is required';
-    if (!formData.lastName) newErrors.lastName = 'Last name is required';
+    if (!formData.unitId) newErrors.unitId = 'Unit is required';
+    if (!formData.firstName && !formData.lastName) {
+      newErrors.firstName = 'At least one of firstName or lastName is required';
+    }
     if (!formData.phoneNumber) newErrors.phoneNumber = 'Phone number is required';
     if (formData.email && !/\S+@\S+\.\S+/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
@@ -243,7 +341,6 @@ export default function CreateCustomerScreen() {
   // Validate invoice form (optional)
   const validateInvoiceForm = () => {
     const newErrors = {};
-    // Only validate if invoiceItems are provided (i.e., not skipping)
     if (invoiceData.invoiceItems.length > 0) {
       invoiceData.invoiceItems.forEach((item, index) => {
         if (!item.description) {
@@ -264,7 +361,6 @@ export default function CreateCustomerScreen() {
   const validateUtilityReadings = () => {
     const newErrors = {};
     utilityReadings.forEach((reading, index) => {
-      // Only validate if reading is provided
       if (reading.reading && (isNaN(reading.reading) || reading.reading < 0)) {
         newErrors[`reading${index}_reading`] = 'Reading must be a non-negative number';
       }
@@ -304,31 +400,17 @@ export default function CreateCustomerScreen() {
       setCustomerId(response.data.data.id);
       setSnackbarMessage(response.data.message || 'Customer created successfully');
       setSnackbarOpen(true);
-      setActiveStep(1); // Move to Step 2
+      setActiveStep(1);
     } catch (err) {
       console.error('Error adding customer:', err);
-      if (err.response) {
-        const { status, data } = err.response;
-        if (status === 400) {
-          setSnackbarMessage(data?.message || 'Invalid input. Please check your details.');
-        } else if (status === 401) {
-          setSnackbarMessage('Unauthorized. Redirecting to login...');
-          setTimeout(() => navigate('/login'), 2000);
-        } else {
-          setSnackbarMessage('Something went wrong. Please try again later.');
-        }
-      } else {
-        setSnackbarMessage('Network error. Please check your connection.');
-      }
+      setSnackbarMessage(
+        err.response?.data?.message || 'Failed to create customer. Please try again.'
+      );
       setSnackbarOpen(true);
     } finally {
       setLoading(false);
     }
   };
-
-  
-
-
 
   // Handle invoice form submission (Step 2, optional)
   const handleInvoiceSubmit = async (e) => {
@@ -342,11 +424,10 @@ export default function CreateCustomerScreen() {
       return;
     }
 
-    // If no invoice items, skip invoice creation and proceed
     if (invoiceData.invoiceItems.length === 0) {
       setSnackbarMessage('No invoice items provided. Proceeding to utility readings.');
       setSnackbarOpen(true);
-      setActiveStep(2); // Move to Step 3 (Utility Readings)
+      setActiveStep(2);
       return;
     }
 
@@ -363,22 +444,12 @@ export default function CreateCustomerScreen() {
       });
       setSnackbarMessage(response.data.message || 'Invoice created successfully');
       setSnackbarOpen(true);
-      setActiveStep(2); // Move to Step 3 (Utility Readings)
+      setActiveStep(2);
     } catch (err) {
       console.error('Error creating invoice:', err);
-      if (err.response) {
-        const { status, data } = err.response;
-        if (status === 400) {
-          setSnackbarMessage(data?.message || 'Invalid invoice data.');
-        } else if (status === 401) {
-          setSnackbarMessage('Unauthorized. Redirecting to login...');
-          setTimeout(() => navigate('/login'), 2000);
-        } else {
-          setSnackbarMessage('Something went wrong. Please try again later.');
-        }
-      } else {
-        setSnackbarMessage('Network error. Please check your connection.');
-      }
+      setSnackbarMessage(
+        err.response?.data?.message || 'Failed to create invoice. Please try again.'
+      );
       setSnackbarOpen(true);
     } finally {
       setLoading(false);
@@ -389,7 +460,7 @@ export default function CreateCustomerScreen() {
   const handleSkipInvoice = () => {
     setSnackbarMessage('Invoice creation skipped');
     setSnackbarOpen(true);
-    setActiveStep(2); // Move to Step 3 (Utility Readings)
+    setActiveStep(2);
   };
 
   // Handle utility readings submission (Step 3)
@@ -425,22 +496,12 @@ export default function CreateCustomerScreen() {
         readingsSubmitted ? 'Utility readings saved successfully' : 'No valid readings provided'
       );
       setSnackbarOpen(true);
-      setActiveStep(3); // Move to Step 4 (Confirmation)
+      setActiveStep(3);
     } catch (err) {
       console.error('Error saving utility readings:', err);
-      if (err.response) {
-        const { status, data } = err.response;
-        if (status === 400) {
-          setSnackbarMessage(data?.message || 'Invalid reading data.');
-        } else if (status === 401) {
-          setSnackbarMessage('Unauthorized. Redirecting to login...');
-          setTimeout(() => navigate('/login'), 2000);
-        } else {
-          setSnackbarMessage('Something went wrong. Please try again later.');
-        }
-      } else {
-        setSnackbarMessage('Network error. Please check your connection.');
-      }
+      setSnackbarMessage(
+        err.response?.data?.message || 'Failed to save utility readings. Please try again.'
+      );
       setSnackbarOpen(true);
     } finally {
       setLoading(false);
@@ -451,7 +512,7 @@ export default function CreateCustomerScreen() {
   const handleSkipUtility = () => {
     setSnackbarMessage('Utility readings skipped');
     setSnackbarOpen(true);
-    setActiveStep(3); // Move to Step 4 (Confirmation)
+    setActiveStep(3);
   };
 
   // Handle confirmation (Step 4)
@@ -463,7 +524,123 @@ export default function CreateCustomerScreen() {
     }, 2000);
   };
 
-  // Stepper steps with numbered labels
+  // Render bulk upload form with notification
+  const renderBulkUploadForm = () => (
+    <Box sx={{ mt: 4 }}>
+      <Typography variant="h6" gutterBottom>
+        Bulk Upload Customers
+      </Typography>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        <Typography variant="body2">
+          <strong>Required Fields and Formats:</strong>
+          <ul>
+            <li>
+              <strong>phoneNumber</strong> (Required): 10-15 digits, optionally starting with + (e.g., 0722324076 or +254722324076). Rows with missing or duplicate phone numbers are skipped.
+            </li>
+            <li>
+              <strong>unitNumber</strong> (Required): Unique unit identifier (e.g., A101, Unit-1). Must not already exist for the selected building.
+            </li>
+            <li>
+              <strong>firstName</strong> (Optional): Customers first name. At least one of firstName or lastName is required.
+            </li>
+            <li>
+              <strong>lastName</strong> (Optional): Customers last name. If firstName is missing, lastName is used for both.
+            </li>
+            <li>
+              <strong>email</strong> (Optional): Valid email format (e.g., john.doe@example.com).
+            </li>
+            <li>
+              <strong>closingBalance</strong> (Optional): Non-negative number for initial balance (e.g., 1000.50).
+            </li>
+          </ul>
+          <strong>Accepted File Formats:</strong> CSV or Excel (.csv, .xlsx).
+          <br />
+          <Button
+            variant="text"
+            onClick={handleTemplateDownload}
+            sx={{ padding: 0, textTransform: 'none', color: theme?.palette?.primary?.contrastText }}
+          >
+            Download Sample CSV Template
+          </Button>
+        </Typography>
+      </Alert>
+      <form onSubmit={handleBulkUpload}>
+        <Grid container spacing={2} sx={{ mt: 2 }}>
+          <Grid item xs={12} sm={6}>
+            <FormControl fullWidth variant="outlined" size="small">
+              <InputLabel>Building</InputLabel>
+              <Select
+                value={bulkBuildingId}
+                onChange={handleBulkBuildingChange}
+                label="Building"
+                disabled={buildingsLoading || bulkLoading}
+              >
+                <MenuItem value="">
+                  <em>{buildingsLoading ? 'Loading...' : 'Select a building'}</em>
+                </MenuItem>
+                {buildings.map((building) => (
+                  <MenuItem key={building.id} value={building.id}>
+                    {building.buildingName} (Landlord: {building.landlord?.name || 'Unknown'})
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <Button
+              variant="contained"
+              component="label"
+              startIcon={<UploadFileIcon />}
+              fullWidth
+              disabled={bulkLoading}
+              sx={{ backgroundColor: theme?.palette?.greenAccent?.main, color: '#fff' }}
+            >
+              {file ? file.name : 'Choose File'}
+              <input type="file" hidden accept=".csv,.xlsx" onChange={handleFileChange} />
+            </Button>
+          </Grid>
+          <Grid item xs={12}>
+            <Button
+              variant="contained"
+              type="submit"
+              fullWidth
+              disabled={bulkLoading || !file || !bulkBuildingId}
+              sx={{ backgroundColor: theme?.palette?.greenAccent?.main, color: '#fff' }}
+            >
+              {bulkLoading ? <CircularProgress size={24} color="inherit" /> : 'Upload Customers'}
+            </Button>
+          </Grid>
+        </Grid>
+      </form>
+      {bulkErrors.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <Typography variant="h6" color="error">
+            Upload Errors
+          </Typography>
+          <TableContainer component={Paper}>
+            <Table>
+              <TableHead>
+                <TableRow>
+                  <TableCell>Row</TableCell>
+                  <TableCell>Reason</TableCell>
+                </TableRow>
+              </TableHead>
+              <TableBody>
+                {bulkErrors.map((error, index) => (
+                  <TableRow key={index}>
+                    <TableCell>{error.row}</TableCell>
+                    <TableCell>{error.reason}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </TableContainer>
+        </Box>
+      )}
+    </Box>
+  );
+
+  // Stepper steps
   const steps = [
     'Step 1: Customer Details',
     'Step 2: Create Invoice',
@@ -529,7 +706,7 @@ export default function CreateCustomerScreen() {
         <Grid item xs={6}>
           <TextField
             fullWidth
-            label="First Name *"
+            label="First Name"
             name="firstName"
             value={formData.firstName}
             onChange={handleCustomerChange}
@@ -542,7 +719,7 @@ export default function CreateCustomerScreen() {
         <Grid item xs={6}>
           <TextField
             fullWidth
-            label="Last Name *"
+            label="Last Name"
             name="lastName"
             value={formData.lastName}
             onChange={handleCustomerChange}
@@ -636,11 +813,6 @@ export default function CreateCustomerScreen() {
           <Typography variant="caption" color="textSecondary">
             Add invoice items if applicable. You can skip this step if no invoice is needed.
           </Typography>
-          {errors.invoiceItems && (
-            <Typography color="error" variant="caption">
-              {errors.invoiceItems}
-            </Typography>
-          )}
           <TableContainer component={Paper} sx={{ mt: 2 }}>
             <Table>
               <TableHead>
@@ -848,7 +1020,7 @@ export default function CreateCustomerScreen() {
         Customer details, invoice (if provided), and utility readings (if provided) have been successfully saved.
       </Typography>
       <Typography variant="body2" color="textSecondary">
-        Click "Finish" to view the customer details or "Back" to review utility readings.
+        Click Finish to view the customer details or Back to review utility readings.
       </Typography>
       <Box sx={{ display: 'flex', gap: 2, mt: 3 }}>
         <Button
@@ -872,8 +1044,8 @@ export default function CreateCustomerScreen() {
   );
 
   return (
-    <Box sx={{  minHeight: '100vh', p: 3,ml:5 }}>
-      <Typography variant="h5" gutterBottom >
+    <Box sx={{ minHeight: '100vh', p: 3, ml: 5 }}>
+      <Typography variant="h5" gutterBottom>
         <TitleComponent title="Add Tenant" />
       </Typography>
 
@@ -897,6 +1069,8 @@ export default function CreateCustomerScreen() {
             : activeStep === 2
             ? renderUtilityForm()
             : renderConfirmationForm()}
+          <Divider sx={{ my: 4 }} />
+          {renderBulkUploadForm()}
         </Paper>
       </ErrorBoundary>
 
