@@ -143,7 +143,7 @@ const CustomerDetails = () => {
     setSending(true);
     try {
       await axios.post(
-        `${BASEURL}/send-invoice`,
+        `${BASEURL}/send-bill`,
         { customerId: customer.id },
         { withCredentials: true }
       );
