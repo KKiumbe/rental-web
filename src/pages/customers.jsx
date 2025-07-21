@@ -83,7 +83,7 @@ const CustomersScreen = () => {
         secondaryPhoneNumber: customer.secondaryPhoneNumber || '',
         nationalId: customer.nationalId || '',
         status: customer.status || 'Unknown',
-        closingBalance: Number(customer.closingBalance ?? 0),
+        closingBalance: customer.closingBalance ?? 0,
         leaseFileUrl: customer.leaseFileUrl || '',
         leaseStartDate: customer.leaseStartDate
           ? new Date(customer.leaseStartDate).toLocaleDateString()
@@ -93,8 +93,8 @@ const CustomersScreen = () => {
           : '',
         unitId: customer.unitId || '',
         unitNumber: customer.unit?.unitNumber || 'None',
-        monthlyCharge: Number(customer.unit?.monthlyCharge ?? 0),
-        depositAmount: Number(customer.unit?.depositAmount ?? 0),
+        monthlyCharge: customer.unit?.monthlyCharge ?? 0,
+        depositAmount: customer.unit?.depositAmount ?? 0,
         buildingName: customer.unit?.building?.name || 'Unassigned',
         createdAt: customer.createdAt
           ? new Date(customer.createdAt).toLocaleDateString()

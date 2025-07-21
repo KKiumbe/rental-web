@@ -38,7 +38,7 @@ const InvoiceDetails = () => {
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
 
-  const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:5000/api";
+  const BASEURL = import.meta.env.VITE_BASE_URL;
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const theme = getTheme();
@@ -69,7 +69,7 @@ const InvoiceDetails = () => {
     setSnackbarMessage("Opening the invoice...");
     setSnackbarOpen(true);
     fetchInvoiceDetails();
-  }, [id]);
+  }, [id, BASEURL]);
 
   const fetchInvoiceDetails = useCallback(async () => {
     try {
@@ -89,7 +89,7 @@ const InvoiceDetails = () => {
       setLoading(false);
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
-  }, [id]);
+  }, [id,BASEURL]);
 
   const handleBack = useCallback(() => {
     navigate(-1);
@@ -131,7 +131,7 @@ const InvoiceDetails = () => {
       setDownloadLoading(false);
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
-  }, [id]);
+  }, [id,BASEURL]);
 
   const handleCancelInvoice = useCallback(async () => {
     setCancelLoading(true);
