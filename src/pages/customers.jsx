@@ -71,43 +71,44 @@ const CustomersScreen = () => {
   }, [currentUser, navigate]);
 
   // Sanitize customer rows
-  const sanitizeRows = useCallback(
-    (rows) => {
-      const sanitized = rows.map((customer, index) => ({
-        ...customer,
-        id: customer.id || `fallback-${index}`,
-        firstName: customer.firstName || '',
-        lastName: customer.lastName || '',
-        email: customer.email || '',
-        phoneNumber: customer.phoneNumber || '',
-        secondaryPhoneNumber: customer.secondaryPhoneNumber || '',
-        nationalId: customer.nationalId || '',
-        status: customer.status || 'Unknown',
-        closingBalance: customer.closingBalance ?? 0,
-        leaseFileUrl: customer.leaseFileUrl || '',
-        leaseStartDate: customer.leaseStartDate
-          ? new Date(customer.leaseStartDate).toLocaleDateString()
-          : '',
-        leaseEndDate: customer.leaseEndDate
-          ? new Date(customer.leaseEndDate).toLocaleDateString()
-          : '',
-        unitId: customer.unitId || '',
-        unitNumber: customer.unit?.unitNumber || 'None',
-        monthlyCharge: customer.CustomerUnit?.unit.monthlyCharge ?? 0,
-        depositAmount: customer.unit?.depositAmount ?? 0,
-        buildingName: customer.unit?.building?.name || 'Unassigned',
-        createdAt: customer.createdAt
-          ? new Date(customer.createdAt).toLocaleDateString()
-          : '',
-        updatedAt: customer.updatedAt
-          ? new Date(customer.updatedAt).toLocaleDateString()
-          : '',
-      }));
-      console.log('Sanitized rows:', sanitized);
-      return sanitized;
-    },
-    []
-  );
+
+const sanitizeRows = useCallback(
+  (rows) => {
+    const sanitized = rows.map((customer, index) => ({
+      id: customer.id || `fallback-${index}`, // Unique ID for DataGrid
+      firstName: customer.firstName || '', // "CATHERINE"
+      lastName: customer.lastName || '', // "KARIUKI"
+      email: customer.email || '', // null -> ""
+      phoneNumber: customer.phoneNumber || '', // "0728122666"
+      secondaryPhoneNumber: customer.secondaryPhoneNumber || '', // null -> ""
+      nationalId: customer.nationalId || '', // null -> ""
+      status: customer.status || 'Unknown', // "ACTIVE"
+      closingBalance: customer.closingBalance ?? 0, // 0
+      leaseFileUrl: customer.leaseFileUrl || '', // null -> ""
+      leaseStartDate: customer.leaseStartDate
+        ? new Date(customer.leaseStartDate).toLocaleDateString()
+        : '', // null -> ""
+      leaseEndDate: customer.leaseEndDate
+        ? new Date(customer.leaseEndDate).toLocaleDateString()
+        : '', // null -> ""
+      unitId: customer.unitId || '', // "dbf4b249-033a-453f-bd1c-512d57f286d1"
+      unitNumber: customer.CustomerUnit?.[0]?.unit?.unitNumber || 'None', // "1"
+      monthlyCharge: customer.CustomerUnit?.[0]?.unit?.monthlyCharge ?? 0, // 6000
+      depositAmount: customer.CustomerUnit?.[0]?.unit?.depositAmount ?? 0, // 0
+      buildingName: customer.CustomerUnit?.[0]?.unit?.building?.name || 'Unassigned', // Not in JSON -> "Unassigned"
+      createdAt: customer.createdAt
+        ? new Date(customer.createdAt).toLocaleDateString()
+        : '', // "7/21/2025"
+      updatedAt: customer.updatedAt
+        ? new Date(customer.updatedAt).toLocaleDateString()
+        : '', // "7/21/2025"
+    }));
+    console.log('Sanitized rows:', sanitized);
+    return sanitized;
+  },
+  []
+);
+
 
   const fetchCustomers = useCallback(
     async (page, pageSize) => {
