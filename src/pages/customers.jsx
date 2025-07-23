@@ -93,7 +93,7 @@ const CustomersScreen = () => {
           : '',
         unitId: customer.unitId || '',
         unitNumber: customer.unit?.unitNumber || 'None',
-        monthlyCharge: customer.unit?.monthlyCharge ?? 0,
+        monthlyCharge: customer.CustomerUnit?.unit.monthlyCharge ?? 0,
         depositAmount: customer.unit?.depositAmount ?? 0,
         buildingName: customer.unit?.building?.name || 'Unassigned',
         createdAt: customer.createdAt
