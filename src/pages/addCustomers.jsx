@@ -82,6 +82,7 @@ export default function CreateCustomerScreen() {
   const [customerId, setCustomerId] = useState(null);
   const [formData, setFormData] = useState({
     unitId: '',
+    buildingId: '',
     firstName: '',
     lastName: '',
     email: '',
@@ -218,11 +219,18 @@ export default function CreateCustomerScreen() {
   };
 
   // Handle building selection for single customer
-  const handleBuildingChange = (e) => {
-    const buildingId = e.target.value;
-    setSelectedBuildingId(buildingId);
-    setFormData((prev) => ({ ...prev, unitId: '' }));
-  };
+ 
+const handleBuildingChange = (e) => {
+  const selectedId = e.target.value;
+  setSelectedBuildingId(selectedId);
+  setFormData((prev) => ({
+    ...prev,
+    buildingId: selectedId, // ✅ include in payload
+    unitId: '', // clear unit selection when building changes
+  }));
+};
+
+
 
   // Handle building selection for bulk upload
   const handleBulkBuildingChange = (e) => {
@@ -319,6 +327,7 @@ export default function CreateCustomerScreen() {
   const validateCustomerForm = () => {
     const newErrors = {};
     if (!formData.unitId) newErrors.unitId = 'Unit is required';
+    if (!formData.buildingId) newErrors.buildingId = 'Building is required';
     if (!formData.firstName && !formData.lastName) {
       newErrors.firstName = 'At least one of firstName or lastName is required';
     }
