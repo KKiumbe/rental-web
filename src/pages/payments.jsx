@@ -39,10 +39,11 @@ const flattenPayments = (payments) => {
       tenantId: payment.tenantId,
       amount: payment.amount,
       modeOfPayment: payment.modeOfPayment,
-      transactionId: payment.transactionId,
-      firstName: payment.firstName,
+      transactionId: payment?.transactionId,
+      firstName: payment?.customer.firstName,
+      lastName: payment?.customer.lastName,
       receipted: payment.receipted,
-      ref: payment.ref,
+      ref: payment?.ref,
       createdAt: payment.createdAt,
       receiptId: receipt.id || null,
       receiptNumber: receipt.receiptNumber || "N/A",
@@ -70,7 +71,7 @@ const Payments = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const theme = getTheme();
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const BASEURL = import.meta.env.VITE_BASE_URL;
 
   useEffect(() => {
     if (!currentUser) {
@@ -299,7 +300,8 @@ const Payments = () => {
       },
     },
     { field: "transactionId", headerName: "Transaction ID", width: 200 },
-    { field: "firstName", headerName: "Customer Name", width: 180 },
+    { field: "firstName", headerName: "First Name", width: 180 },
+    { field: "lastName", headerName: "Last Name", width: 180 },
     { field: "ref", headerName: "Reference Number", width: 180 },
     {
       field: "receipted",

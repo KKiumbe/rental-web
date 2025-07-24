@@ -167,6 +167,13 @@ const BuildingsScreen = () => {
   const [pageSize] = useState(5); // Fixed to 5 items per page
   const [totalBuildings, setTotalBuildings] = useState(0);
 
+const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+const [selectedUnitForAssign, setSelectedUnitForAssign] = useState(null);
+const [customerSearchQuery, setCustomerSearchQuery] = useState('');
+const [customerSearchResults, setCustomerSearchResults] = useState([]);
+const [isCustomerSearching, setIsCustomerSearching] = useState(false);
+const [assignmentLoading, setAssignmentLoading] = useState(false);
+
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const theme = getTheme();
@@ -407,6 +414,134 @@ const handleAddUnit = () => {
     }));
   };
 
+
+  const handleOpenAssignDialog = (unit) => {
+  setSelectedUnitForAssign(unit);
+  setAssignDialogOpen(true);
+};
+
+const handleCloseAssignDialog = () => {
+  setAssignDialogOpen(false);
+  setSelectedUnitForAssign(null);
+  setCustomerSearchQuery('');
+  setCustomerSearchResults([]);
+};
+
+const handleCustomerSearch = async (query) => {
+  const trimmedQuery = (query || "").trim();
+  if (!trimmedQuery) {
+    setCustomerSearchResults([]);
+    return;
+  }
+
+  setIsCustomerSearching(true);
+  const isPhoneNumber = /^\d+$/.test(trimmedQuery);
+
+  try {
+    const url = isPhoneNumber 
+      ? `${BASE_URL}/search-customer-by-phone` 
+      : `${BASE_URL}/search-customer-by-name`;
+    const params = isPhoneNumber ? { phone: trimmedQuery } : { name: trimmedQuery };
+
+    if (isPhoneNumber && trimmedQuery.length < 10) {
+      setCustomerSearchResults([]);
+      return;
+    }
+
+    const response = await axios.get(url, { params, withCredentials: true });
+    const results = isPhoneNumber 
+      ? response.data ? [response.data] : [] 
+      : Array.isArray(response.data) ? response.data : [];
+    
+    setCustomerSearchResults(results);
+    if (!results.length) {
+      setSnackbarMessage(isPhoneNumber ? "No customer found with that phone number" : "No customer found with that name");
+      setSnackbarOpen(true);
+    }
+  } catch (error) {
+    console.error("Customer search error:", error.message);
+    setSnackbarMessage(error.code === "ERR_NETWORK" 
+      ? "Server not reachable. Please check if the backend is running."
+      : error.response?.status === 404 
+        ? (isPhoneNumber ? "No customer found with that phone number" : "No customer found with that name")
+        : "Error searching customers: " + (error.response?.data?.message || error.message));
+    setSnackbarOpen(true);
+    setCustomerSearchResults([]);
+  } finally {
+    setIsCustomerSearching(false);
+  }
+};
+
+const handleAssignUnit = async (customerId) => {
+  try {
+    setAssignmentLoading(true);
+    
+    if (!selectedUnitForAssign?.id || !customerId) {
+      setSnackbarMessage('Unit or customer not selected');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    // Check if this assignment already exists locally
+    const isAlreadyAssigned = selectedUnitForAssign.customers?.some(
+      customer => customer.id === customerId
+    );
+
+    if (isAlreadyAssigned) {
+      setSnackbarMessage('Customer is already assigned to this unit');
+      setSnackbarOpen(true);
+      return;
+    }
+
+    const response = await axios.post(
+      `${BASE_URL}/assign-unit-to-customer`,
+      {
+        customerId,
+        unitId: selectedUnitForAssign.id
+      },
+      { withCredentials: true }
+    );
+
+    setSnackbarMessage(response.data.message || 'Unit assigned successfully');
+    setSnackbarOpen(true);
+    
+    // Refresh data
+    await fetchBuilding(selectedBuilding.id);
+    if (selectedUnit) {
+      await fetchUnit(selectedUnit.id);
+    }
+    
+    handleCloseAssignDialog();
+  } catch (error) {
+    console.error('Assign unit error:', error);
+    
+    let errorMessage = 'Failed to assign unit';
+    if (error.response) {
+      switch (error.response.status) {
+        case 400:
+          errorMessage = error.response.data?.message || 'Missing required information';
+          break;
+        case 404:
+          errorMessage = error.response.data?.message || 'Unit or customer not found';
+          break;
+        case 409:
+          errorMessage = error.response.data?.message || 'This unit is already assigned to the customer';
+          break;
+        case 500:
+          errorMessage = 'Internal server error';
+          break;
+        default:
+          errorMessage = error.response.data?.message || `Error: ${error.response.status}`;
+      }
+    }
+    
+    setSnackbarMessage(errorMessage);
+    setSnackbarOpen(true);
+  } finally {
+    setAssignmentLoading(false);
+  }
+};
+
   const buildingColumns = [
     {
       field: 'actions',
@@ -431,10 +566,10 @@ const handleAddUnit = () => {
     { field: 'name', headerName: 'Building Name', width: 200 },
     { field: 'address', headerName: 'Address', width: 250 },
     { field: 'unitCount', headerName: 'Total Units', width: 120, type: 'number' },
-    { field: 'managementRate', headerName: 'Management Rate ($)', width: 150, type: 'number' },
+    { field: 'managementRate', headerName: 'Management Rate (ksh)', width: 150, type: 'number' },
     { field: 'occupiedUnits', headerName: 'Occupied Units', width: 150, type: 'number' },
-    { field: 'gasRate', headerName: 'Gas Rate ($)', width: 120, type: 'number' },
-    { field: 'waterRate', headerName: 'Water Rate ($)', width: 120, type: 'number' },
+    { field: 'gasRate', headerName: 'Gas Rate (ksh)', width: 120, type: 'number' },
+    { field: 'waterRate', headerName: 'Water Rate (ksh)', width: 120, type: 'number' },
     { field: 'landlord', headerName: 'Landlord', width: 150 },
     {
       field: 'createdAt',
@@ -482,6 +617,34 @@ const handleAddUnit = () => {
         </IconButton>
       ),
     },
+
+
+    {
+    field: 'assign',
+    headerName: 'Assign',
+    width: 120,
+    renderCell: (params) => (
+      <Button 
+        variant="contained" 
+        size="small"
+        onClick={() => handleOpenAssignDialog(params.row)}
+        disabled={params.row.status === 'OCCUPIED'}
+        sx={{
+          backgroundColor: params.row.status === 'OCCUPIED' 
+            ? theme?.palette?.grey[500] 
+            : theme?.palette?.greenAccent?.main,
+          color: '#fff',
+          '&:hover': {
+            backgroundColor: params.row.status === 'OCCUPIED' 
+              ? theme?.palette?.grey[500] 
+              : theme?.palette?.greenAccent?.dark,
+          },
+        }}
+      >
+        {params.row.status === 'OCCUPIED' ? 'Occupied' : 'Assign'}
+      </Button>
+    ),
+  },
     { field: 'unitNumber', headerName: 'Unit Number', width: 120 },
     {
       field: 'monthlyCharge',
@@ -492,42 +655,42 @@ const handleAddUnit = () => {
     },
     {
       field: 'depositAmount',
-      headerName: 'Deposit Amount ($)',
+      headerName: 'Deposit Amount (ksh)',
       width: 150,
       type: 'number',
       //valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     {
       field: 'garbageCharge',
-      headerName: 'Garbage Charge ($)',
+      headerName: 'Garbage Charge (ksh)',
       width: 150,
       type: 'number',
       //valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     {
       field: 'serviceCharge',
-      headerName: 'Service Charge ($)',
+      headerName: 'Service Charge (ksh)',
       width: 150,
       type: 'number',
       //valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     {
       field: 'securityCharge',
-      headerName: 'Security Charge ($)',
+      headerName: 'Security Charge (ksh)',
       width: 150,
       type: 'number',
      //valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     {
       field: 'amenitiesCharge',
-      headerName: 'Amenities Charge ($)',
+      headerName: 'Amenities Charge (ksh)',
       width: 150,
       type: 'number',
      // valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
     },
     {
       field: 'backupGeneratorCharge',
-      headerName: 'Backup Generator Charge ($)',
+      headerName: 'Backup Generator Charge (ksh)',
       width: 150,
       type: 'number',
       //valueFormatter: ({ value }) => `$${Number(value).toFixed(2)}`,
@@ -750,13 +913,13 @@ const handleAddUnit = () => {
           {selectedUnit ? (
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
               <Typography><strong>Unit Number:</strong> {selectedUnit.unitNumber}</Typography>
-              <Typography><strong>Monthly Charge:</strong> ${selectedUnit.monthlyCharge}</Typography>
-              <Typography><strong>Deposit Amount:</strong> ${selectedUnit.depositAmount}</Typography>
-              <Typography><strong>Garbage Charge:</strong> ${selectedUnit.garbageCharge || 'N/A'}</Typography>
-              <Typography><strong>Service Charge:</strong> ${selectedUnit.serviceCharge || 'N/A'}</Typography>
-              <Typography><strong>Security Charge:</strong> ${selectedUnit.securityCharge || 'N/A'}</Typography>
-              <Typography><strong>Amenities Charge:</strong> ${selectedUnit.amenitiesCharge || 'N/A'}</Typography>
-              <Typography><strong>Backup Generator Charge:</strong> ${selectedUnit.backupGeneratorCharge || 'N/A'}</Typography>
+              <Typography><strong>Monthly Charge:</strong> ksh{selectedUnit.monthlyCharge}</Typography>
+              <Typography><strong>Deposit Amount:</strong> ksh{selectedUnit.depositAmount}</Typography>
+              <Typography><strong>Garbage Charge:</strong> ksh{selectedUnit.garbageCharge || 'N/A'}</Typography>
+              <Typography><strong>Service Charge:</strong> ksh{selectedUnit.serviceCharge || 'N/A'}</Typography>
+              <Typography><strong>Security Charge:</strong> ksh{selectedUnit.securityCharge || 'N/A'}</Typography>
+              <Typography><strong>Amenities Charge:</strong> ksh{selectedUnit.amenitiesCharge || 'N/A'}</Typography>
+              <Typography><strong>Backup Generator Charge:</strong> ksh{selectedUnit.backupGeneratorCharge || 'N/A'}</Typography>
               <Typography><strong>Status:</strong> {selectedUnit.status}</Typography>
               <Typography><strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}</Typography>
               <Typography><strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}</Typography>
@@ -775,6 +938,114 @@ const handleAddUnit = () => {
         </DialogActions>
       </Dialog>
 
+
+      {/* Assign Unit Dialog */}
+
+<Dialog open={assignDialogOpen} onClose={handleCloseAssignDialog} maxWidth="md" fullWidth>
+  <DialogTitle>
+    Assign Unit {selectedUnitForAssign?.unitNumber} to Customer
+  </DialogTitle>
+  <DialogContent>
+    <Box sx={{ mt: 2 }}>
+      <Typography variant="subtitle1" gutterBottom>
+        Current Assignments:
+      </Typography>
+      
+      {selectedUnitForAssign?.customers?.length > 0 ? (
+        <Box sx={{ mb: 3 }}>
+          {selectedUnitForAssign.customers.map(customer => (
+            <Paper key={customer.id} sx={{ p: 2, mb: 1 }}>
+              <Typography>
+                <strong>Name:</strong> {customer.firstName} {customer.lastName}
+              </Typography>
+              <Typography>
+                <strong>Phone:</strong> {customer.phoneNumber}
+              </Typography>
+              <Typography>
+                <strong>Email:</strong> {customer.email || 'N/A'}
+              </Typography>
+            </Paper>
+          ))}
+        </Box>
+      ) : (
+        <Typography color="textSecondary" sx={{ mb: 3 }}>
+          No current assignments
+        </Typography>
+      )}
+
+      <Typography variant="subtitle1" gutterBottom>
+        Add New Assignment:
+      </Typography>
+      
+      <TextField
+        fullWidth
+        label="Search Customer by Name or Phone"
+        value={customerSearchQuery}
+        onChange={(e) => {
+          setCustomerSearchQuery(e.target.value);
+          handleCustomerSearch(e.target.value);
+        }}
+        sx={{ mb: 2 }}
+      />
+      
+      {isCustomerSearching && <CircularProgress size={24} />}
+      
+      {customerSearchResults.length > 0 && (
+        <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+          {customerSearchResults.map((customer) => (
+            <Paper 
+              key={customer.id} 
+              sx={{ 
+                p: 2, 
+                mb: 1,
+                border: '1px solid',
+                borderColor: selectedUnitForAssign.customers?.some(c => c.id === customer.id)
+                  ? 'error.main'
+                  : 'divider'
+              }}
+            >
+              <Typography><strong>Name:</strong> {customer.firstName} {customer.lastName}</Typography>
+              <Typography><strong>Phone:</strong> {customer.phoneNumber}</Typography>
+              <Typography><strong>Email:</strong> {customer.email || 'N/A'}</Typography>
+              
+              {selectedUnitForAssign.customers?.some(c => c.id === customer.id) ? (
+                <Typography color="error" sx={{ mt: 1 }}>
+                  Already assigned to this unit
+                </Typography>
+              ) : (
+                <Button
+                  variant="contained"
+                  size="small"
+                  onClick={() => handleAssignUnit(customer.id)}
+                  disabled={assignmentLoading}
+                  sx={{ 
+                    mt: 1,
+                    backgroundColor: theme?.palette?.greenAccent?.main,
+                    color: '#fff',
+                    '&:hover': {
+                      backgroundColor: theme?.palette?.greenAccent?.dark,
+                    },
+                  }}
+                >
+                  {assignmentLoading ? 'Assigning...' : 'Assign to Unit'}
+                </Button>
+              )}
+            </Paper>
+          ))}
+        </Box>
+      )}
+    </Box>
+  </DialogContent>
+  <DialogActions>
+    <Button 
+      onClick={handleCloseAssignDialog}
+      disabled={assignmentLoading}
+    >
+      Close
+    </Button>
+  </DialogActions>
+</Dialog>
+
       {/* Edit Unit Modal */}
       <Dialog open={editUnitOpen} onClose={handleCloseEditUnit} maxWidth="sm" fullWidth>
         <DialogTitle>Edit Unit</DialogTitle>
@@ -789,7 +1060,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Monthly Charge ($)"
+              label="Monthly Charge (ksh)"
               name="monthlyCharge"
               type="number"
               value={editFormData.monthlyCharge}
@@ -797,7 +1068,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Deposit Amount ($)"
+              label="Deposit Amount (ksh)"
               name="depositAmount"
               type="number"
               value={editFormData.depositAmount}
@@ -805,7 +1076,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Garbage Charge ($)"
+              label="Garbage Charge (ksh)"
               name="garbageCharge"
               type="number"
               value={editFormData.garbageCharge}
@@ -813,7 +1084,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Service Charge ($)"
+              label="Service Charge (ksh)"
               name="serviceCharge"
               type="number"
               value={editFormData.serviceCharge}
@@ -821,7 +1092,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Security Charge ($)"
+              label="Security Charge (ksh)"
               name="securityCharge"
               type="number"
               value={editFormData.securityCharge}
@@ -829,7 +1100,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Amenities Charge ($)"
+              label="Amenities Charge (ksh)"
               name="amenitiesCharge"
               type="number"
               value={editFormData.amenitiesCharge}
@@ -837,7 +1108,7 @@ const handleAddUnit = () => {
               fullWidth
             />
             <TextField
-              label="Backup Generator Charge ($)"
+              label="Backup Generator Charge (ksh)"
               name="backupGeneratorCharge"
               type="number"
               value={editFormData.backupGeneratorCharge}

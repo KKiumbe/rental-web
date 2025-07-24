@@ -69,7 +69,7 @@ const Receipts = () => {
  
   const navigate = useNavigate();
   const theme = useTheme();
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const BASEURL = import.meta.env.VITE_BASE_URL;
 
   useEffect(() => {
     if (!currentUser) {

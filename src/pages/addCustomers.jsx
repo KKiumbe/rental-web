@@ -681,37 +681,50 @@ const handleBuildingChange = (e) => {
             </Select>
           </FormControl>
         </Grid>
-        <Grid item xs={12}>
-          <FormControl
-            fullWidth
-            variant="outlined"
-            size="small"
-            error={!!errors.unitId}
-            disabled={!selectedBuildingId || unitsLoading}
-          >
-            <InputLabel>Unit</InputLabel>
-            <Select
-              name="unitId"
-              value={formData.unitId}
-              onChange={handleCustomerChange}
-              label="Unit"
-            >
-              <MenuItem value="">
-                <em>{unitsLoading ? 'Loading...' : units.length === 0 ? 'No units available' : 'Select a unit'}</em>
-              </MenuItem>
-              {units.map((unit) => (
-                <MenuItem key={unit.id} value={unit.id}>
-                  {unit.unitNumber}
-                </MenuItem>
-              ))}
-            </Select>
-            {errors.unitId && (
-              <Typography color="error" variant="caption">
-                {errors.unitId}
-              </Typography>
-            )}
-          </FormControl>
-        </Grid>
+    
+<Grid item xs={12}>
+  <FormControl
+    fullWidth
+    variant="outlined"
+    size="small"
+    error={!!errors.unitId}
+    disabled={!selectedBuildingId || unitsLoading}
+  >
+    <InputLabel>Unit</InputLabel>
+    <Select
+      name="unitId"
+      value={formData.unitId}
+      onChange={handleCustomerChange}
+      label="Unit"
+    >
+      <MenuItem value="">
+        <em>{unitsLoading ? 'Loading...' : units.length === 0 ? 'No units available' : 'Select a unit'}</em>
+      </MenuItem>
+      {units.map((unit) => (
+        <MenuItem 
+          key={unit.id} 
+          value={unit.id}
+          disabled={unit.status === 'OCCUPIED'}
+          sx={{
+            color: unit.status === 'OCCUPIED' ? 'text.disabled' : 'text.primary',
+            backgroundColor: unit.status === 'OCCUPIED' ? 'action.disabledBackground' : 'inherit',
+            '&:hover': {
+              backgroundColor: unit.status === 'OCCUPIED' ? 'action.disabledBackground' : 'action.hover',
+            }
+          }}
+        >
+          {unit.unitNumber} {unit.status === 'OCCUPIED' ? '(Occupied)' : ''}
+        </MenuItem>
+      ))}
+    </Select>
+    {errors.unitId && (
+      <Typography color="error" variant="caption">
+        {errors.unitId}
+      </Typography>
+    )}
+  </FormControl>
+</Grid>
+
         <Grid item xs={6}>
           <TextField
             fullWidth

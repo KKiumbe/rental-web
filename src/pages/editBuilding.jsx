@@ -354,7 +354,7 @@ const EditBuildingScreen = () => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="Water Rate ($)"
+                    label="Water Rate (ksh)"
                     name="waterRate"
                     type="number"
                     value={form.waterRate}
@@ -370,7 +370,7 @@ const EditBuildingScreen = () => {
                 <Grid item xs={12} sm={6}>
                   <TextField
                     fullWidth
-                    label="Gas Rate ($)"
+                    label="Gas Rate (ksh)"
                     name="gasRate"
                     type="number"
                     value={form.gasRate}
@@ -386,7 +386,7 @@ const EditBuildingScreen = () => {
                 <Grid item xs={12}>
                   <TextField
                     fullWidth
-                    label="Management Rate ($)"
+                    label="Management Rate (%)"
                     name="managementRate"
                     type="number"
                     value={form.managementRate}

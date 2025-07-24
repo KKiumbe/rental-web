@@ -2,11 +2,6 @@ import { useEffect, useState, Component } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
-  DataGrid,
-  GridToolbarContainer,
-  GridToolbarExport,
-} from '@mui/x-data-grid';
-import {
   CircularProgress,
   Typography,
   Box,
@@ -27,16 +22,33 @@ import {
   DialogContent,
   DialogActions,
   Snackbar,
+  Chip,
+  AppBar,
+  Toolbar,
+  Container,
+  Breadcrumbs,
 } from '@mui/material';
+import {
+  DataGrid,
+  GridToolbarContainer,
+  GridToolbarExport,
+} from '@mui/x-data-grid';
 import AddIcon from '@mui/icons-material/Add';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import EditIcon from '@mui/icons-material/Edit';
+import ArrowBackIcon from '@mui/icons-material/ArrowBack';
+import ApartmentIcon from '@mui/icons-material/Apartment';
+import PeopleIcon from '@mui/icons-material/People';
+import {  ThemeProvider } from '@mui/material/styles';
 import PropTypes from 'prop-types';
 
-// Assuming TitleComponent and theme/auth imports are correctly set up
-import TitleComponent from '../components/title';
-import { getTheme } from '../store/theme';
 import { useAuthStore } from '../store/authStore';
+import { getTheme } from '../store/theme';
+
+
+
+// Custom Theme
+
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -49,7 +61,7 @@ class ErrorBoundary extends Component {
   render() {
     if (this.state.hasError) {
       return (
-        <Typography color="error" sx={{ p: 2 }}>
+        <Typography color="error" sx={{ p: 4, textAlign: 'center' }}>
           Error rendering page: {this.state.error?.message || 'Unknown error'}
         </Typography>
       );
@@ -61,8 +73,6 @@ class ErrorBoundary extends Component {
 ErrorBoundary.propTypes = {
   children: PropTypes.node,
 };
-
-// Define unitColumns for the DataGrid
 
 const BuildingDetailsScreen = () => {
   const [building, setBuilding] = useState(null);
@@ -92,15 +102,33 @@ const BuildingDetailsScreen = () => {
     backupGeneratorCharge: 0,
     status: 'VACANT',
   });
-  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarMessage
+
+, setSnackbarMessage] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [unitsLoading, setUnitsLoading] = useState(false);
-   const [viewUnitOpen, setViewUnitOpen] = useState(false);
-     const [selectedUnit, setSelectedUnit] = useState(null);
+  const [viewUnitOpen, setViewUnitOpen] = useState(false);
+  const [selectedUnit, setSelectedUnit] = useState(null);
+  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
+  const [selectedUnitForAssign, setSelectedUnitForAssign] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [expenseModalOpen, setExpenseModalOpen] = useState(false);
   const { id } = useParams();
+  const [expenseForm, setExpenseForm] = useState({
+    buildingId: id,
+    expenseType: 'REPAIR',
+    amount: '',
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+  });
+
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const BASE_URL = import.meta.env.VITE_BASE_URL;
+
+   const theme = getTheme();
 
   // Sanitize building object
   const sanitizedBuilding = building
@@ -146,48 +174,38 @@ const BuildingDetailsScreen = () => {
     }
   };
 
-
-const fetchUnit = async (id) => {
-  try {
-    setUnitsLoading(true);
-
-    // Fetch unit details
-    const unitResponse = await axios.get(`${BASE_URL}/units/${id}`, { withCredentials: true });
-    const unitData = unitResponse.data?.data;
-    if (!unitData) throw new Error('No unit data returned');
-
-    setSelectedUnit(unitData);
-    setEditFormData({
-      unitNumber: unitData.unitNumber || '',
-      monthlyCharge: Number(unitData.monthlyCharge) || 0,
-      depositAmount: Number(unitData.depositAmount) || 0,
-      garbageCharge: Number(unitData.garbageCharge) || 0,
-      serviceCharge: Number(unitData.serviceCharge) || 0,
-      securityCharge: Number(unitData.securityCharge) || 0,
-      amenitiesCharge: Number(unitData.amenitiesCharge) || 0,
-      backupGeneratorCharge: Number(unitData.backupGeneratorCharge) || 0,
-      status: unitData.status || 'VACANT',
-    });
-
-    // Fetch customers of this unit
-    const customersResponse = await axios.get(`${BASE_URL}/units/${id}/customers`, {
-      withCredentials: true,
-    });
-    setUnitCustomers(customersResponse.data?.data || []);
-
-  } catch (err) {
-    console.error('Fetch unit error:', err);
-    setSnackbarMessage(err.response?.data?.error || 'Failed to fetch unit details');
-    setSnackbarOpen(true);
-    setSelectedUnit(null);
-    setUnitCustomers([]);
-  } finally {
-    setUnitsLoading(false);
-  }
-};
-
-
-
+  const fetchUnit = async (id) => {
+    try {
+      setUnitsLoading(true);
+      const response = await axios.get(`${BASE_URL}/units/${id}`, {
+        withCredentials: true,
+      });
+      const unitData = response.data?.data;
+      if (!unitData) throw new Error('No unit data returned');
+      setSelectedUnit(unitData);
+      setEditFormData({
+        buildingId: id,
+        unitNumber: unitData.unitNumber || '',
+        monthlyCharge: Number(unitData.monthlyCharge) || 0,
+        depositAmount: Number(unitData.depositAmount) || 0,
+        garbageCharge: Number(unitData.garbageCharge) || 0,
+        serviceCharge: Number(unitData.serviceCharge) || 0,
+        securityCharge: Number(unitData.securityCharge) || 0,
+        amenitiesCharge: Number(unitData.amenitiesCharge) || 0,
+        backupGeneratorCharge: Number(unitData.backupGeneratorCharge) || 0,
+        status: unitData.status || 'VACANT',
+      });
+      setUnitCustomers(unitData.customers || []);
+    } catch (err) {
+      console.error('Fetch unit error:', err);
+      setSnackbarMessage(err.response?.data?.error || 'Failed to fetch unit details');
+      setSnackbarOpen(true);
+      setSelectedUnit(null);
+      setUnitCustomers([]);
+    } finally {
+      setUnitsLoading(false);
+    }
+  };
 
   const handleFormChange = (e) => {
     const { name, value } = e.target;
@@ -196,7 +214,8 @@ const fetchUnit = async (id) => {
       [name]: name === 'status' ? value : name.includes('Charge') || name === 'depositAmount' ? parseFloat(value) || '' : value,
     }));
   };
-    const handleViewUnit = (unit) => {
+
+  const handleViewUnit = (unit) => {
     fetchUnit(unit.id);
     setViewUnitOpen(true);
   };
@@ -209,19 +228,14 @@ const fetchUnit = async (id) => {
     }));
   };
 
-const handleAddUnit = () => {
-  if (!building || !building.id) {
-    console.warn('No building selected for adding unit');
-    setSnackbarMessage('Please select a building first');
-    setSnackbarOpen(true);
-    return;
-  }
-
-  
-  console.log(`Navigating to /add-unit/${building}`);
-  navigate(`/add-unit/${building.id || id}`);
-};
-
+  const handleAddUnit = () => {
+    if (!building || !building.id) {
+      setSnackbarMessage('Please select a building first');
+      setSnackbarOpen(true);
+      return;
+    }
+    navigate(`/add-unit/${building.id || id}`);
+  };
 
   const handleCloseModal = () => {
     setOpenModal(false);
@@ -237,9 +251,7 @@ const handleAddUnit = () => {
     });
   };
 
-  
-
-    const handleCloseViewUnit = () => {
+  const handleCloseViewUnit = () => {
     setViewUnitOpen(false);
     setSelectedUnit(null);
   };
@@ -280,7 +292,6 @@ const handleAddUnit = () => {
     }
   };
 
-
   const handleEditUnit = (unit) => {
     fetchUnit(unit.id);
     setEditUnitOpen(true);
@@ -299,6 +310,37 @@ const handleAddUnit = () => {
       backupGeneratorCharge: 0,
       status: 'VACANT',
     });
+  };
+
+  const handleExpenseFormChange = (e) => {
+    const { name, value } = e.target;
+    setExpenseForm((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleExpenseSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      await axios.post(`${BASE_URL}/building-expenses`, expenseForm, {
+        withCredentials: true,
+      });
+      setSnackbarMessage('Expense submitted successfully');
+      setSnackbarOpen(true);
+      setExpenseModalOpen(false);
+      setExpenseForm({
+        buildingId: id,
+        expenseType: 'REPAIR',
+        amount: '',
+        description: '',
+        date: new Date().toISOString().split('T')[0],
+      });
+    } catch (err) {
+      console.error('Submit expense error:', err);
+      setSnackbarMessage(err.response?.data?.error || 'Failed to submit expense');
+      setSnackbarOpen(true);
+    }
   };
 
   const handleUpdateUnit = async () => {
@@ -339,15 +381,102 @@ const handleAddUnit = () => {
     }
   };
 
+  const handleOpenAssignDialog = (unit) => {
+    setSelectedUnitForAssign(unit);
+    setAssignDialogOpen(true);
+  };
+
+  const handleCloseAssignDialog = () => {
+    setAssignDialogOpen(false);
+    setSelectedUnitForAssign(null);
+    setSearchQuery('');
+    setSearchResults([]);
+  };
+
+  const handleSearch = async (query) => {
+    const trimmedQuery = (query || '').trim();
+    if (!trimmedQuery) {
+      setSearchResults([]);
+      return;
+    }
+    setIsSearching(true);
+    const isPhoneNumber = /^\d+$/.test(trimmedQuery);
+    try {
+      const url = isPhoneNumber
+        ? `${BASE_URL}/search-customer-by-phone`
+        : `${BASE_URL}/search-customer-by-name`;
+      const params = isPhoneNumber ? { phone: trimmedQuery } : { name: trimmedQuery };
+      if (isPhoneNumber && trimmedQuery.length < 10) {
+        setSearchResults([]);
+        return;
+      }
+      const response = await axios.get(url, { params, withCredentials: true });
+      const results = isPhoneNumber
+        ? response.data
+          ? [response.data]
+          : []
+        : Array.isArray(response.data)
+        ? response.data
+        : [];
+      setSearchResults(results);
+      if (!results.length) {
+        setSnackbarMessage(
+          isPhoneNumber ? 'No customer found with that phone number' : 'No customer found with that name'
+        );
+        setSnackbarOpen(true);
+      }
+    } catch (error) {
+      console.error('Search error:', error.message);
+      setSnackbarMessage(
+        error.code === 'ERR_NETWORK'
+          ? 'Server not reachable. Please check if the backend is running.'
+          : error.response?.status === 404
+          ? isPhoneNumber
+            ? 'No customer found with that phone number'
+            : 'No customer found with that name'
+          : 'Error searching customers: ' + (error.response?.data?.message || error.message)
+      );
+      setSnackbarOpen(true);
+      setSearchResults([]);
+    } finally {
+      setIsSearching(false);
+    }
+  };
+
+  const handleAssignUnit = async (customerId) => {
+    try {
+      if (!selectedUnitForAssign?.id || !customerId) {
+        setSnackbarMessage('Unit or customer not selected');
+        setSnackbarOpen(true);
+        return;
+      }
+      await axios.post(
+        `${BASE_URL}/assign-unit-to-customer`,
+        {
+          customerId,
+          unitId: selectedUnitForAssign.id,
+        },
+        { withCredentials: true }
+      );
+      setSnackbarMessage('Unit assigned successfully');
+      setSnackbarOpen(true);
+      fetchBuilding();
+      handleCloseAssignDialog();
+    } catch (error) {
+      console.error('Assign unit error:', error);
+      setSnackbarMessage(error.response?.data?.error || 'Failed to assign unit');
+      setSnackbarOpen(true);
+    }
+  };
 
   const unitColumns = [
     {
-      field: 'actions',
+      field: 'actionsascus',
       headerName: 'View',
       width: 80,
       renderCell: (params) => (
-        <IconButton onClick={() => handleViewUnit(params.row)}>
-          <VisibilityIcon />
+        <IconButton onClick={() => handleViewUnit(params.row)} title="View Unit">
+          <VisibilityIcon color="action" />
         </IconButton>
       ),
     },
@@ -357,33 +486,63 @@ const handleAddUnit = () => {
       width: 80,
       renderCell: (params) => (
         <IconButton onClick={() => handleEditUnit(params.row)} title="Edit Unit">
-          <EditIcon />
+          <EditIcon color="action" />
         </IconButton>
       ),
     },
-
-  { field: 'unitNumber', headerName: 'Unit Number', width: 150 },
-  { field: 'monthlyCharge', headerName: 'Monthly Charge ($)', width: 150 },
-  { field: 'depositAmount', headerName: 'Deposit Amount ($)', width: 150 },
-  { field: 'garbageCharge', headerName: 'Garbage Charge ($)', width: 150 },
-  { field: 'serviceCharge', headerName: 'Service Charge ($)', width: 150 },
-  {
-    field: 'status',
-    headerName: 'Status',
-    width: 120,
-    renderCell: (params) => (
-      <Typography color={params.value === 'OCCUPIED' ? 'green' : 'orange'}>
-        {params.value}
-      </Typography>
-    ),
-  },
-
-];
-
-// Customer columns (already defined in the original code)
-
-
-
+    {
+      field: 'assign',
+      headerName: 'Assign',
+      width: 120,
+      renderCell: (params) => (
+        <Button
+          //variant="outlined"
+          size="small"
+          onClick={() => handleOpenAssignDialog(params.row)}
+          disabled={params.row.status === 'OCCUPIED'}
+          startIcon={<AddIcon  color='action' />}
+          color={theme?.palette?.grey[300]}
+        >
+          Assign
+        </Button>
+      ),
+    },
+    { field: 'unitNumber', headerName: 'Unit Number', width: 150 },
+    {
+      field: 'customers',
+      headerName: 'Customers',
+      width: 200,
+      renderCell: (params) => (
+        <Box>
+          {params.value?.map((customer) => (
+            <Chip
+              key={customer.id}
+              label={customer.fullName || `${customer.firstName} ${customer.lastName}`}
+              size="small"
+              sx={{ mr: 1, mb: 1 }}
+              color={customer.isActive ? 'primary' : 'default'}
+            />
+          ))}
+        </Box>
+      ),
+    },
+    { field: 'monthlyCharge', headerName: 'Monthly Charge (ksh)', width: 150 },
+    { field: 'depositAmount', headerName: 'Deposit Amount (ksh)', width: 150 },
+    { field: 'garbageCharge', headerName: 'Garbage Charge (ksh)', width: 150 },
+    { field: 'serviceCharge', headerName: 'Service Charge (ksh)', width: 150 },
+    {
+      field: 'status',
+      headerName: 'Status',
+      width: 120,
+      renderCell: (params) => (
+        <Chip
+          label={params.value}
+          color={params.value === 'OCCUPIED' ? 'success' : 'warning'}
+          size="small"
+        />
+      ),
+    },
+  ];
 
   useEffect(() => {
     if (id) {
@@ -392,43 +551,75 @@ const handleAddUnit = () => {
   }, [id]);
 
   return (
-    <Box sx={{  minHeight: '100vh', p: 3 }}>
-      <Typography variant="h5" gutterBottom sx={{ ml: 5 }}>
-        <TitleComponent title="Building Details" />
-      </Typography>
+    <ThemeProvider theme={theme}>
+      <Container maxWidth="lg" sx={{ minHeight: '100vh', py: 4 }}>
+        {/* Enhanced Header */}
+        <AppBar position="static"  elevation={1} sx={{ mb: 4, borderRadius: 2 }}>
+          <Toolbar>
+            <IconButton edge="start" onClick={() => navigate (-1)} sx={{ mr: 2 }}>
+              <ArrowBackIcon />
+            </IconButton>
+            <Box sx={{ flexGrow: 1 }}>
+              <Typography variant="h4" component="h1">
+                {sanitizedBuilding?.buildingName || 'Building Details'}
+              </Typography>
+              <Breadcrumbs aria-label="breadcrumb" sx={{ mt: 1 }}>
+                <Link to="/properties" style={{ textDecoration: 'none',  }}>
+                  Buildings
+                </Link>
+                <Typography >{sanitizedBuilding?.buildingName || 'Details'}</Typography>
+              </Breadcrumbs>
+            </Box>
+          </Toolbar>
+        </AppBar>
 
-      {loading ? (
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '80vh' }}>
-          <CircularProgress size={30} />
-        </Box>
-      ) : error ? (
-        <Typography color="error" sx={{ ml: 5 }}>
-          {error}
-        </Typography>
-      ) : !sanitizedBuilding ? (
-        <Typography sx={{ ml: 5 }}>No building data available</Typography>
-      ) : (
-        <ErrorBoundary>
-          <Box sx={{ ml: 5, mr: 5 }}>
+        {loading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+            <CircularProgress size={40} />
+            <Typography sx={{ ml: 2 }}>Loading building details...</Typography>
+          </Box>
+        ) : error ? (
+          <Paper sx={{ p: 4, textAlign: 'center',  }}>
+            <Typography color="error">{error}</Typography>
+          </Paper>
+        ) : !sanitizedBuilding ? (
+          <Paper sx={{ p: 4, textAlign: 'center' }}>
+            <Typography>No building data available</Typography>
+          </Paper>
+        ) : (
+          <ErrorBoundary>
             {/* Building Details Card */}
             <Card sx={{ mb: 4 }}>
               <CardContent>
-                <Typography variant="h6" gutterBottom>
-                  {sanitizedBuilding.buildingName}
-                </Typography>
-                <Grid container spacing={2}>
+                <Grid container spacing={3}>
                   <Grid item xs={12} sm={6}>
-                    <Typography><strong>Address:</strong> {sanitizedBuilding.address}</Typography>
-                    <Typography><strong>Total Units:</strong> {sanitizedBuilding.unitCount}</Typography>
-                    <Typography><strong>Management Rate:</strong> ${sanitizedBuilding.managementRate.toFixed(2)}</Typography>
-                    <Typography><strong>Gas Rate:</strong> ${sanitizedBuilding.gasRate.toFixed(2)}</Typography>
-                    <Typography><strong>Water Rate:</strong> ${sanitizedBuilding.waterRate.toFixed(2)}</Typography>
+                    <Typography variant="body1">
+                      <strong>Address:</strong> {sanitizedBuilding.address}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Total Units:</strong> {sanitizedBuilding.unitCount}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Management Rate:</strong> %{sanitizedBuilding.managementRate.toFixed(2)}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Gas Rate:</strong> ksh{sanitizedBuilding.gasRate.toFixed(2)}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Water Rate:</strong> ksh{sanitizedBuilding.waterRate.toFixed(2)}
+                    </Typography>
                   </Grid>
                   <Grid item xs={12} sm={6}>
-                    <Typography><strong>Landlord:</strong> {sanitizedBuilding.landlord.name}</Typography>
-                    <Typography><strong>Landlord Email:</strong> {sanitizedBuilding.landlord.email}</Typography>
-                    <Typography><strong>Landlord Phone:</strong> {sanitizedBuilding.landlord.phoneNumber}</Typography>
-                    <Typography>
+                    <Typography variant="body1">
+                      <strong>Landlord:</strong> {sanitizedBuilding.landlord.name}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Landlord Email:</strong> {sanitizedBuilding.landlord.email}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Landlord Phone:</strong> {sanitizedBuilding.landlord.phoneNumber}
+                    </Typography>
+                    <Typography variant="body1">
                       <strong>Created At:</strong>{' '}
                       {new Date(sanitizedBuilding.createdAt).toLocaleDateString('en-US', {
                         year: 'numeric',
@@ -438,25 +629,46 @@ const handleAddUnit = () => {
                     </Typography>
                   </Grid>
                 </Grid>
+                <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 3, gap: 2 }}>
+                  <Button
+                    component={Link}
+                    to={`/edit-building/${id}`}
+                    variant="contained"
+                    color={theme.palette.greenAccent.main}
+                    startIcon={<EditIcon />}
+                  >
+                    Edit Property
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color={theme.palette.greenAccent.main}
+                    onClick={() => setExpenseModalOpen(true)}
+                    startIcon={<AddIcon />}
+                  >
+                    Raise Repair Expense
+                  </Button>
+                </Box>
               </CardContent>
             </Card>
 
             {/* Units Section */}
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" gutterBottom>
-                Units ({sanitizedBuilding.units.length})
+              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                <ApartmentIcon /> Units ({sanitizedBuilding.units.length})
               </Typography>
-             <Button
-  variant="contained"
-  color="primary"
-  onClick={handleAddUnit}
-  disabled={!building?.id}
->
-  Add Unit
-</Button>
+              <Button
+                variant="contained"
+                color= {theme.palette.greenAccent.main}
 
+                
+                onClick={handleAddUnit}
+                disabled={!building?.id}
+                startIcon={<AddIcon />}
+              >
+                Add Unit
+              </Button>
             </Box>
-            <Paper sx={{ width: '100%', mb: 4 }}>
+            <Paper sx={{ mb: 4 }}>
               <DataGrid
                 rows={sanitizedBuilding.units}
                 columns={unitColumns}
@@ -478,32 +690,41 @@ const handleAddUnit = () => {
             </Paper>
 
             {/* Customers Section */}
-
-            <Typography variant="subtitle1" sx={{ mt: 3 }}>
-  Customers in this Unit
-</Typography>
-{unitCustomers.length > 0 ? (
-  <DataGrid
-    rows={unitCustomers.map((c) => ({
-      ...c,
-      name: `${c.firstName} ${c.lastName}`,
-    }))}
-    columns={[
-      { field: 'name', headerName: 'Name', width: 180 },
-      { field: 'email', headerName: 'Email', width: 200 },
-      { field: 'phoneNumber', headerName: 'Phone Number', width: 160 },
-      { field: 'status', headerName: 'Status', width: 120 }
-    ]}
-    getRowId={(row) => row.id}
-    autoHeight
-    hideFooterPagination
-  />
-) : (
-  <Typography>No customers found for this unit.</Typography>
-)}
-
-            
-          
+            {selectedUnit && unitCustomers.length > 0 && (
+              <>
+                <Typography variant="h6" sx={{ mt: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <PeopleIcon /> Customers in Unit {selectedUnit.unitNumber}
+                </Typography>
+                <Paper sx={{ mb: 4 }}>
+                  <DataGrid
+                    rows={unitCustomers.map((c) => ({
+                      id: c.id,
+                      fullName: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                      phoneNumber: c.phoneNumber,
+                      email: c.email,
+                      status: c.isActive ? 'Active' : 'Inactive',
+                      startDate: c.startDate ? new Date(c.startDate).toLocaleDateString() : 'N/A',
+                    }))}
+                    columns={[
+                      { field: 'fullName', headerName: 'Name', width: 180 },
+                      { field: 'email', headerName: 'Email', width: 200 },
+                      { field: 'phoneNumber', headerName: 'Phone Number', width: 160 },
+                      {
+                        field: 'status',
+                        headerName: 'Status',
+                        width: 120,
+                        renderCell: (params) => (
+                          <Chip label={params.value} color={params.value === 'Active' ? 'success' : 'default'} size="small" />
+                        ),
+                      },
+                    ]}
+                    getRowId={(row) => row.id}
+                    autoHeight
+                    hideFooterPagination
+                  />
+                </Paper>
+              </>
+            )}
 
             {/* Add Unit Modal */}
             <Modal open={openModal} onClose={handleCloseModal}>
@@ -514,10 +735,9 @@ const handleAddUnit = () => {
                   left: '50%',
                   transform: 'translate(-50%, -50%)',
                   width: 400,
-                  bgcolor: 'background.paper',
-                  boxShadow: 24,
+                  
                   p: 4,
-                  borderRadius: 1,
+                  borderRadius: 2,
                 }}
               >
                 <Typography variant="h6" gutterBottom>
@@ -537,9 +757,10 @@ const handleAddUnit = () => {
                     fullWidth
                     margin="normal"
                     required
+                    variant="outlined"
                   />
                   <TextField
-                    label="Monthly Charge ($)"
+                    label="Monthly Charge (ksh)"
                     name="monthlyCharge"
                     value={unitForm.monthlyCharge}
                     onChange={handleFormChange}
@@ -547,9 +768,10 @@ const handleAddUnit = () => {
                     margin="normal"
                     type="number"
                     required
+                    variant="outlined"
                   />
                   <TextField
-                    label="Deposit Amount ($)"
+                    label="Deposit Amount (ksh)"
                     name="depositAmount"
                     value={unitForm.depositAmount}
                     onChange={handleFormChange}
@@ -557,9 +779,10 @@ const handleAddUnit = () => {
                     margin="normal"
                     type="number"
                     required
+                    variant="outlined"
                   />
                   <TextField
-                    label="Garbage Charge ($)"
+                    label="Garbage Charge (ksh)"
                     name="garbageCharge"
                     value={unitForm.garbageCharge}
                     onChange={handleFormChange}
@@ -567,9 +790,10 @@ const handleAddUnit = () => {
                     margin="normal"
                     type="number"
                     required
+                    variant="outlined"
                   />
                   <TextField
-                    label="Service Charge ($)"
+                    label="Service Charge (ksh)"
                     name="serviceCharge"
                     value={unitForm.serviceCharge}
                     onChange={handleFormChange}
@@ -577,6 +801,7 @@ const handleAddUnit = () => {
                     margin="normal"
                     type="number"
                     required
+                    variant="outlined"
                   />
                   <FormControl fullWidth margin="normal">
                     <InputLabel>Status</InputLabel>
@@ -585,16 +810,17 @@ const handleAddUnit = () => {
                       value={unitForm.status}
                       onChange={handleFormChange}
                       label="Status"
+                      variant="outlined"
                     >
                       <MenuItem value="VACANT">Vacant</MenuItem>
                       <MenuItem value="OCCUPIED">Occupied</MenuItem>
                     </Select>
                   </FormControl>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 2 }}>
-                    <Button onClick={handleCloseModal} sx={{ mr: 1 }}>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+                    <Button onClick={handleCloseModal} variant="outlined">
                       Cancel
                     </Button>
-                    <Button type="submit" variant="contained" color="primary">
+                    <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
                       Add Unit
                     </Button>
                   </Box>
@@ -614,62 +840,70 @@ const handleAddUnit = () => {
                     onChange={handleInputChange}
                     required
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Monthly Charge ($)"
+                    label="Monthly Charge (ksh)"
                     name="monthlyCharge"
                     type="number"
                     value={editFormData.monthlyCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Deposit Amount ($)"
+                    label="Deposit Amount (ksh)"
                     name="depositAmount"
                     type="number"
                     value={editFormData.depositAmount}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Garbage Charge ($)"
+                    label="Garbage Charge (ksh)"
                     name="garbageCharge"
                     type="number"
                     value={editFormData.garbageCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Service Charge ($)"
+                    label="Service Charge (ksh)"
                     name="serviceCharge"
                     type="number"
                     value={editFormData.serviceCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Security Charge ($)"
+                    label="Security Charge (ksh)"
                     name="securityCharge"
                     type="number"
                     value={editFormData.securityCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Amenities Charge ($)"
+                    label="Amenities Charge (ksh)"
                     name="amenitiesCharge"
                     type="number"
                     value={editFormData.amenitiesCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <TextField
-                    label="Backup Generator Charge ($)"
+                    label="Backup Generator Charge (ksh)"
                     name="backupGeneratorCharge"
                     type="number"
                     value={editFormData.backupGeneratorCharge}
                     onChange={handleInputChange}
                     fullWidth
+                    variant="outlined"
                   />
                   <FormControl fullWidth>
                     <InputLabel>Status</InputLabel>
@@ -678,6 +912,7 @@ const handleAddUnit = () => {
                       value={editFormData.status}
                       onChange={handleInputChange}
                       required
+                      variant="outlined"
                     >
                       <MenuItem value="VACANT">Vacant</MenuItem>
                       <MenuItem value="OCCUPIED">Occupied</MenuItem>
@@ -691,44 +926,213 @@ const handleAddUnit = () => {
                 <Button onClick={handleUpdateUnit} variant="contained" color="primary" disabled={unitsLoading}>
                   {unitsLoading ? 'Saving...' : 'Save'}
                 </Button>
-                <Button onClick={handleCloseEditUnit} disabled={unitsLoading}>
+                <Button onClick={handleCloseEditUnit} variant="outlined" disabled={unitsLoading}>
                   Cancel
                 </Button>
               </DialogActions>
             </Dialog>
 
+            {/* Assign Unit Dialog */}
+            <Dialog open={assignDialogOpen} onClose={handleCloseAssignDialog} maxWidth="sm" fullWidth>
+              <DialogTitle>Assign Unit to Customer</DialogTitle>
+              <DialogContent>
+                <Box sx={{ mt: 2 }}>
+                  <Typography variant="subtitle1" gutterBottom>
+                    Assigning: {selectedUnitForAssign?.unitNumber}
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    label="Search Customer by Name or Phone"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      handleSearch(e.target.value);
+                    }}
+                    sx={{ mb: 2 }}
+                    variant="outlined"
+                  />
+                  {isSearching && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto' }} />}
+                  {searchResults.length > 0 && (
+                    <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                      <Typography variant="subtitle2" gutterBottom>
+                        Search Results:
+                      </Typography>
+                      {searchResults.map((customer) => (
+                        <Paper key={customer.id} sx={{ p: 2, mb: 1, borderRadius: 2 }}>
+                          <Typography>
+                            <strong>Name:</strong> {customer.firstName} {customer.lastName}
+                          </Typography>
+                          <Typography>
+                            <strong>Phone:</strong> {customer.phoneNumber}
+                          </Typography>
+                          <Typography>
+                            <strong>Email:</strong> {customer.email || 'N/A'}
+                          </Typography>
+                          <Button
+                            variant="contained"
+                            size="small"
+                            onClick={() => handleAssignUnit(customer.id)}
+                            sx={{ mt: 1 }}
+                          >
+                            Assign to This Customer
+                          </Button>
+                        </Paper>
+                      ))}
+                    </Box>
+                  )}
+                </Box>
+              </DialogContent>
+              <DialogActions>
+                <Button onClick={handleCloseAssignDialog} variant="outlined">
+                  Cancel
+                </Button>
+              </DialogActions>
+            </Dialog>
 
-            {/* View Unit Modal */}
-                  <Dialog open={viewUnitOpen} onClose={handleCloseViewUnit} maxWidth="sm" fullWidth>
-                    <DialogTitle>Unit Details</DialogTitle>
-                    <DialogContent>
-                      {selectedUnit ? (
-                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                          <Typography><strong>Unit Number:</strong> {selectedUnit.unitNumber}</Typography>
-                          <Typography><strong>Monthly Charge:</strong> ${selectedUnit.monthlyCharge}</Typography>
-                          <Typography><strong>Deposit Amount:</strong> ${selectedUnit.depositAmount}</Typography>
-                          <Typography><strong>Garbage Charge:</strong> ${selectedUnit.garbageCharge || 'N/A'}</Typography>
-                          <Typography><strong>Service Charge:</strong> ${selectedUnit.serviceCharge || 'N/A'}</Typography>
-                          <Typography><strong>Security Charge:</strong> ${selectedUnit.securityCharge || 'N/A'}</Typography>
-                          <Typography><strong>Amenities Charge:</strong> ${selectedUnit.amenitiesCharge || 'N/A'}</Typography>
-                          <Typography><strong>Backup Generator Charge:</strong> ${selectedUnit.backupGeneratorCharge || 'N/A'}</Typography>
-                          <Typography><strong>Status:</strong> {selectedUnit.status}</Typography>
-                          <Typography><strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}</Typography>
-                          <Typography><strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}</Typography>
-                        </Box>
-                      ) : (
-                        <Typography>Loading unit details...</Typography>
-                      )}
-                    </DialogContent>
-                    <DialogActions>
-                      <Button onClick={() => { handleCloseViewUnit(); setEditUnitOpen(true); }} disabled={unitsLoading}>
-                        Edit
-                      </Button>
-                      <Button onClick={handleCloseViewUnit} disabled={unitsLoading}>
-                        Close
-                      </Button>
-                    </DialogActions>
-                  </Dialog>
+            {/* Expense Modal */}
+            <Modal open={expenseModalOpen} onClose={() => setExpenseModalOpen(false)}>
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  width: 400,
+                  
+                  p: 4,
+                  borderRadius: 2,
+                }}
+              >
+                <Typography variant="h6" gutterBottom>
+                  Raise Repair Expense
+                </Typography>
+                <form onSubmit={handleExpenseSubmit}>
+                  <FormControl fullWidth margin="normal">
+                    <InputLabel>Expense Type</InputLabel>
+                    <Select
+                      name="expenseType"
+                      value={expenseForm.expenseType}
+                      onChange={handleExpenseFormChange}
+                      label="Expense Type"
+                      variant="outlined"
+                    >
+                      <MenuItem value="REPAIR">Repair</MenuItem>
+                      <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
+                      <MenuItem value="UTILITY">Utility</MenuItem>
+                      <MenuItem value="OTHER">Other</MenuItem>
+                    </Select>
+                  </FormControl>
+                  <TextField
+                    label="Amount (ksh)"
+                    name="amount"
+                    type="number"
+                    value={expenseForm.amount}
+                    onChange={handleExpenseFormChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    variant="outlined"
+                  />
+                  <TextField
+                    label="Description"
+                    name="description"
+                    value={expenseForm.description}
+                    onChange={handleExpenseFormChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    multiline
+                    rows={3}
+                    variant="outlined"
+                  />
+                  <TextField
+                    label="Date"
+                    name="date"
+                    type="date"
+                    value={expenseForm.date}
+                    onChange={handleExpenseFormChange}
+                    fullWidth
+                    margin="normal"
+                    required
+                    InputLabelProps={{ shrink: true }}
+                    variant="outlined"
+                  />
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+                    <Button onClick={() => setExpenseModalOpen(false)} variant="outlined">
+                      Cancel
+                    </Button>
+                    <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
+                      Submit Expense
+                    </Button>
+                  </Box>
+                </form>
+              </Box>
+            </Modal>
+
+            {/* View Unit Dialog */}
+            <Dialog open={viewUnitOpen} onClose={handleCloseViewUnit} maxWidth="sm" fullWidth>
+              <
+
+DialogTitle>Unit Details</DialogTitle>
+              <DialogContent>
+                {selectedUnit ? (
+                  <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                    <Typography variant="body1">
+                      <strong>Unit Number:</strong> {selectedUnit.unitNumber}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Monthly Charge:</strong> ksh{selectedUnit.monthlyCharge}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Deposit Amount:</strong> ksh{selectedUnit.depositAmount}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Garbage Charge:</strong> ksh{selectedUnit.garbageCharge || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Service Charge:</strong> ksh{selectedUnit.serviceCharge || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Security Charge:</strong> ksh{selectedUnit.securityCharge || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Amenities Charge:</strong> ksh{selectedUnit.amenitiesCharge || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Backup Generator Charge:</strong> ksh{selectedUnit.backupGeneratorCharge || 'N/A'}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Status:</strong>{' '}
+                      <Chip label={selectedUnit.status} color={selectedUnit.status === 'OCCUPIED' ? 'success' : 'warning'} size="small" />
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}
+                    </Typography>
+                    <Typography variant="body1">
+                      <strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}
+                    </Typography>
+                  </Box>
+                ) : (
+                  <Typography>Loading unit details...</Typography>
+                )}
+              </DialogContent>
+              <DialogActions>
+                <Button
+                  onClick={() => {
+                    handleCloseViewUnit();
+                    setEditUnitOpen(true);
+                  }}
+                  variant="contained"
+                  color="primary"
+                  disabled={unitsLoading}
+                >
+                  Edit
+                </Button>
+                <Button onClick={handleCloseViewUnit} variant="outlined" disabled={unitsLoading}>
+                  Close
+                </Button>
+              </DialogActions>
+            </Dialog>
 
             {/* Snackbar */}
             <Snackbar
@@ -736,11 +1140,12 @@ const handleAddUnit = () => {
               autoHideDuration={3000}
               onClose={() => setSnackbarOpen(false)}
               message={snackbarMessage}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
             />
-          </Box>
-        </ErrorBoundary>
-      )}
-    </Box>
+          </ErrorBoundary>
+        )}
+      </Container>
+    </ThemeProvider>
   );
 };
 
