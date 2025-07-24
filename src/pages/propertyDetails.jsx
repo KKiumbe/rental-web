@@ -312,6 +312,7 @@ const handleAddUnit = () => {
         return;
       }
       const payload = {
+        buildingId: building?.id,
         unitNumber: editFormData.unitNumber,
         monthlyCharge: Number(editFormData.monthlyCharge),
         depositAmount: Number(editFormData.depositAmount),
