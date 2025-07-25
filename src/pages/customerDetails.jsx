@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import {
   Container,
@@ -22,6 +22,9 @@ import {
   FormControl,
   InputLabel,
   LinearProgress,
+  List,
+  ListItem,
+  ListItemText,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import axios from "axios";
@@ -39,12 +42,6 @@ const CustomerDetails = () => {
   const theme = getTheme();
   const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:3000/api";
   const [customer, setCustomer] = useState(null);
-  const [deposits, setDeposits] = useState([]);
-  const [waterReadings, setWaterReadings] = useState([]);
-  const [waterReadingsLoading, setWaterReadingsLoading] = useState(false);
-  const [waterReadingsError, setWaterReadingsError] = useState(null);
-  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 5 });
-  const [rowCount, setRowCount] = useState(0);
   const [tabIndex, setTabIndex] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -65,53 +62,27 @@ const CustomerDetails = () => {
     }
   }, [currentUser, navigate]);
 
-  // Fetch customer and deposit details
-  useEffect(() => {
-    const fetchCustomerDetails = async () => {
-      try {
-        const [customerResponse, depositsResponse] = await Promise.all([
-          axios.get(`${BASEURL}/customer-details/${id}`, { withCredentials: true }),
-          axios.get(`${BASEURL}/customers/${id}/deposits`, { withCredentials: true }),
-        ]);
-        setCustomer(customerResponse.data);
-        setDeposits(depositsResponse.data.deposits || []);
-      } catch (err) {
-        console.error("Error fetching customer or deposits:", err);
-        setError(err.response?.data?.message || "Failed to load customer details.");
-      } finally {
-        setLoading(false);
-      }
-    };
-    fetchCustomerDetails();
-  }, [id, BASEURL]);
-
-  // Fetch water readings using /water-readings/customer
-  const fetchWaterReadings = async (page, pageSize) => {
-    setWaterReadingsLoading(true);
-    setWaterReadingsError(null);
+  // Fetch customer details
+  const fetchCustomerDetails = useCallback(async () => {
+    setLoading(true);
+    setError(null);
     try {
-      const response = await axios.get(`${BASEURL}/water-readings/customer`, {
-        params: { customerId: id, page: page + 1, limit: pageSize },
+      const response = await axios.get(`${BASEURL}/customer-details/${id}`, {
         withCredentials: true,
       });
-      setWaterReadings(response.data.data || []);
-      setRowCount(response.data.totalCount || 0);
+      console.log("Customer response:", JSON.stringify(response.data, null, 2));
+      setCustomer(response.data);
     } catch (err) {
-      console.error("Error fetching water readings:", err);
-      setWaterReadingsError(err.response?.data?.message || "Failed to load water readings.");
-      setWaterReadings([]);
-      setRowCount(0);
+      console.error("Error fetching customer details:", err);
+      setError(err.response?.data?.message || "Failed to load customer details.");
     } finally {
-      setWaterReadingsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [id, BASEURL]);
 
-  // Fetch water readings when tab is selected or pagination changes
   useEffect(() => {
-    if (tabIndex === 3 && customer) {
-      fetchWaterReadings(paginationModel.page, paginationModel.pageSize);
-    }
-  }, [tabIndex, paginationModel, customer, id]);
+    fetchCustomerDetails();
+  }, [fetchCustomerDetails]);
 
   // Handle tab change
   const handleTabChange = (event, newValue) => {
@@ -269,7 +240,9 @@ const CustomerDetails = () => {
       await axios.post(`${BASEURL}/terminate-lease/${id}`, {}, { withCredentials: true });
       setCustomer((prev) => ({
         ...prev,
-        leaseFileUrl: "",
+        leaseFileUrl: null,
+        leaseStartDate: null,
+        leaseEndDate: null,
       }));
       setSuccess("Lease terminated successfully");
       setOpenLeaseModal(false);
@@ -305,17 +278,17 @@ const CustomerDetails = () => {
       ),
     },
     { field: "invoiceNumber", headerName: "Invoice #", width: 150 },
-    { field: "invoiceAmount", headerName: "Amount", width: 120 },
+    { field: "invoiceAmount", headerName: "Amount (KES)", width: 120 },
     { field: "status", headerName: "Status", width: 120 },
     {
-      field: "InvoiceItem",
+      field: "items",
       headerName: "Items",
       width: 300,
       renderCell: (params) => (
-        <ul>
+        <ul style={{ margin: 0, paddingLeft: "20px" }}>
           {params.value.map((item) => (
             <li key={item.id}>
-              {item.description} - {item.quantity} x {item.amount}
+              {item.description} - {item.quantity} x {item.amount} KES
             </li>
           ))}
         </ul>
@@ -349,7 +322,7 @@ const CustomerDetails = () => {
       ),
     },
     { field: "receiptNumber", headerName: "Receipt #", width: 150 },
-    { field: "amount", headerName: "Amount", width: 120 },
+    { field: "amount", headerName: "Amount (KES)", width: 120 },
     {
       field: "modeOfPayment",
       headerName: "Payment Mode",
@@ -474,9 +447,7 @@ const CustomerDetails = () => {
               <IconButton onClick={handleBack} sx={{ color: theme.palette.greenAccent.main, mr: 2 }}>
                 <ArrowBackIcon sx={{ fontSize: 30 }} />
               </IconButton>
-              <Typography variant="h5">
-                {customer.firstName} {customer.lastName}
-              </Typography>
+              <Typography variant="h5">{customer.fullName}</Typography>
             </Stack>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
@@ -494,17 +465,38 @@ const CustomerDetails = () => {
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
+                <Typography variant="subtitle1" gutterBottom>
+                  <strong>Units:</strong>
+                </Typography>
+                {customer.units.length > 0 ? (
+                  <List dense>
+                    {customer.units.map((unit) => (
+                      <ListItem key={unit.id}>
+                        <ListItemText
+                          primary={`Unit ${unit.unitNumber}`}
+                          secondary={
+                            <>
+                              Building: {unit.building.name || "N/A"}
+                              <br />
+                              Rent: {unit.monthlyCharge} KES
+                              <br />
+                              Status: {unit.status}
+                              <br />
+                              Landlord: {unit.building.landlord ? `${unit.building.landlord.firstName} ${unit.building.landlord.lastName}` : "N/A"}
+                            </>
+                          }
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+                ) : (
+                  <Typography>Not Assigned</Typography>
+                )}
                 <Typography>
-                  <strong>Unit:</strong> {customer.unitName || "Not Assigned"}
+                  <strong>Lease:</strong> {customer.leaseFileUrl ? `Active (Started: ${new Date(customer.leaseStartDate).toLocaleDateString()})` : "No Lease"}
                 </Typography>
                 <Typography>
-                  <strong>Building:</strong> {customer.buildingName || "N/A"}
-                </Typography>
-                <Typography>
-                  <strong>Lease:</strong> {customer.leaseFileUrl ? "Active" : "No Lease"}
-                </Typography>
-                <Typography>
-                  <strong>Closing Balance:</strong> {customer.closingBalance}
+                  <strong>Closing Balance:</strong> {customer.closingBalance} KES
                 </Typography>
                 <Typography>
                   <strong>Status:</strong> {customer.status}
@@ -570,8 +562,7 @@ const CustomerDetails = () => {
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to delete {customer.firstName} {customer.lastName}? This action
-                cannot be undone.
+                Are you sure you want to delete {customer.fullName}? This action cannot be undone.
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -594,7 +585,7 @@ const CustomerDetails = () => {
             <Box
               sx={{
                 p: 4,
-                bgcolor: "background.paper",
+                bgcolor: theme.palette.background.paper,
                 borderRadius: 2,
                 width: 400,
                 mx: "auto",
@@ -736,8 +727,7 @@ const CustomerDetails = () => {
             <DialogTitle>Confirm Lease Termination</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to terminate the lease for {customer.firstName}{" "}
-                {customer.lastName}?
+                Are you sure you want to terminate the lease for {customer.fullName}?
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -759,8 +749,7 @@ const CustomerDetails = () => {
             <DialogTitle>Confirm Customer Activation</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to activate customer {customer.firstName} {customer.lastName}?
-                Make sure invoices for rent and deposits are paid.
+                Are you sure you want to activate customer {customer.fullName}? Make sure invoices for rent and deposits are paid.
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -798,7 +787,7 @@ const CustomerDetails = () => {
             <DataGrid
               rows={customer.invoices || []}
               columns={invoiceColumns}
-              pageSize={5}
+              pageSizeOptions={[5]}
               getRowId={(row) => row.id}
               autoHeight
             />
@@ -812,7 +801,7 @@ const CustomerDetails = () => {
             <DataGrid
               rows={customer.receipts || []}
               columns={receiptColumns}
-              pageSize={5}
+              pageSizeOptions={[5]}
               getRowId={(row) => row.id}
               autoHeight
             />
@@ -826,7 +815,7 @@ const CustomerDetails = () => {
             <DataGrid
               rows={customer.gasConsumptions || []}
               columns={gasConsumptionColumns}
-              pageSize={5}
+              pageSizeOptions={[5]}
               getRowId={(row) => row.id}
               autoHeight
             />
@@ -837,28 +826,16 @@ const CustomerDetails = () => {
             <Typography variant="h6" mb={2}>
               Water Consumption
             </Typography>
-            {waterReadingsLoading ? (
-              <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
-                <CircularProgress size={24} sx={{ color: theme.palette.greenAccent.main }} />
-              </Box>
-            ) : waterReadingsError ? (
-              <Alert severity="error" sx={{ mb: 2 }}>
-                {waterReadingsError}
-              </Alert>
-            ) : waterReadings.length === 0 ? (
+            {customer.waterConsumptions.length === 0 ? (
               <Typography sx={{ color: theme.palette.grey[100], textAlign: "center", mt: 2 }}>
                 No water readings found.
               </Typography>
             ) : (
               <DataGrid
-                rows={waterReadings}
+                rows={customer.waterConsumptions || []}
                 columns={waterConsumptionColumns}
-                getRowId={(row) => row.id}
-                paginationMode="server"
-                rowCount={rowCount}
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
                 pageSizeOptions={[5, 10, 20]}
+                getRowId={(row) => row.id}
                 autoHeight
               />
             )}
