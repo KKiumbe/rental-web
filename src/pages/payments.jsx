@@ -35,18 +35,18 @@ const flattenPayments = (payments) => {
     const firstInvoice = receiptInvoices[0]?.invoice || {};
 
     return {
-      id: payment.id,
+       id: payment.id,
       tenantId: payment.tenantId,
       amount: payment.amount,
       modeOfPayment: payment.modeOfPayment,
-      transactionId: payment?.transactionId,
-      firstName: payment?.customer.firstName,
-      lastName: payment?.customer.lastName,
+      transactionId: payment.transactionId || "N/A",
+      firstName: payment.customer?.firstName || payment.firstName || "N/A",
+      lastName: payment.customer?.lastName || "N/A",
       receipted: payment.receipted,
-      ref: payment?.ref,
+      ref: payment.ref || "N/A",
       createdAt: payment.createdAt,
       receiptId: receipt.id || null,
-      receiptNumber: receipt.receiptNumber || "N/A",
+      receiptNumber: receipt.id ? `REC-${receipt.id}` : "N/A", // Adjust based on backend receipt number format
       invoiceId: firstInvoice.id || null,
       invoiceNumber: firstInvoice.invoiceNumber || "N/A",
     };
