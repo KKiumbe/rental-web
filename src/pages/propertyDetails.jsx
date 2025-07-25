@@ -27,6 +27,7 @@ import {
   Toolbar,
   Container,
   Breadcrumbs,
+  FormHelperText,
 } from '@mui/material';
 import {
   DataGrid,
@@ -39,16 +40,15 @@ import EditIcon from '@mui/icons-material/Edit';
 import ArrowBackIcon from '@mui/icons-material/ArrowBack';
 import ApartmentIcon from '@mui/icons-material/Apartment';
 import PeopleIcon from '@mui/icons-material/People';
-import {  ThemeProvider } from '@mui/material/styles';
+import { ThemeProvider } from '@mui/material/styles';
 import PropTypes from 'prop-types';
+// New imports for DatePicker
+import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { format } from 'date-fns';
 
 import { useAuthStore } from '../store/authStore';
 import { getTheme } from '../store/theme';
-
-
-
-// Custom Theme
-
 
 // Error Boundary Component
 class ErrorBoundary extends Component {
@@ -102,9 +102,7 @@ const BuildingDetailsScreen = () => {
     backupGeneratorCharge: 0,
     status: 'VACANT',
   });
-  const [snackbarMessage
-
-, setSnackbarMessage] = useState('');
+  const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [unitsLoading, setUnitsLoading] = useState(false);
   const [viewUnitOpen, setViewUnitOpen] = useState(false);
@@ -115,10 +113,19 @@ const BuildingDetailsScreen = () => {
   const [searchResults, setSearchResults] = useState([]);
   const [isSearching, setIsSearching] = useState(false);
   const [expenseModalOpen, setExpenseModalOpen] = useState(false);
+  const [utilityBillModalOpen, setUtilityBillModalOpen] = useState(false);
+  const [utilityBillForm, setUtilityBillForm] = useState({
+    buildingId: '',
+    amount: '',
+    description: '',
+    invoicePeriod: null, // Changed to null for Date object
+    invoiceType: 'UTILITY',
+  });
+  const [utilityBillFormError, setUtilityBillFormError] = useState('');
   const { id } = useParams();
   const [expenseForm, setExpenseForm] = useState({
     buildingId: id,
-    expenseType: 'REPAIR',
+    expenseType: 'SHARED_UTILITY',
     amount: '',
     description: '',
     date: new Date().toISOString().split('T')[0],
@@ -127,8 +134,7 @@ const BuildingDetailsScreen = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const BASE_URL = import.meta.env.VITE_BASE_URL;
-
-   const theme = getTheme();
+  const theme = getTheme();
 
   // Sanitize building object
   const sanitizedBuilding = building
@@ -160,6 +166,7 @@ const BuildingDetailsScreen = () => {
       });
       setBuilding(response.data);
       setUnitForm((prev) => ({ ...prev, buildingId: response.data.id || id }));
+      setUtilityBillForm((prev) => ({ ...prev, buildingId: response.data.id || id }));
     } catch (err) {
       console.error('Fetch building error:', err);
       if (err.response?.status === 401) {
@@ -320,6 +327,14 @@ const BuildingDetailsScreen = () => {
     }));
   };
 
+  const handleUtilityBillFormChange = (e) => {
+    const { name, value } = e.target;
+    setUtilityBillForm((prev) => ({
+      ...prev,
+      [name]: name === 'amount' ? parseFloat(value) || '' : value,
+    }));
+  };
+
   const handleExpenseSubmit = async (e) => {
     e.preventDefault();
     try {
@@ -339,6 +354,43 @@ const BuildingDetailsScreen = () => {
     } catch (err) {
       console.error('Submit expense error:', err);
       setSnackbarMessage(err.response?.data?.error || 'Failed to submit expense');
+      setSnackbarOpen(true);
+    }
+  };
+
+  const handleUtilityBillSubmit = async (e) => {
+    e.preventDefault();
+    setUtilityBillFormError('');
+    try {
+      if (!utilityBillForm.amount || !utilityBillForm.description || !utilityBillForm.invoicePeriod) {
+        setUtilityBillFormError('Please fill in all required fields.');
+        return;
+      }
+      await axios.post(
+        `${BASE_URL}/shared-utility-bill`,
+        {
+          buildingId: utilityBillForm.buildingId,
+          amount: Number(utilityBillForm.amount),
+          description: utilityBillForm.description,
+          invoicePeriod: format(utilityBillForm.invoicePeriod, 'MM/yyyy'), // Format date as MM/YYYY
+          invoiceType: utilityBillForm.invoiceType,
+        },
+        { withCredentials: true }
+      );
+      setSnackbarMessage('Utility bills generated successfully');
+      setSnackbarOpen(true);
+      setUtilityBillModalOpen(false);
+      setUtilityBillForm({
+        buildingId: id,
+        amount: '',
+        description: '',
+        invoicePeriod: null, // Reset to null
+        invoiceType: 'SHARED_UTILITY',
+      });
+    } catch (err) {
+      console.error('Generate utility bill error:', err);
+      setUtilityBillFormError(err.response?.data?.error || 'Failed to generate utility bills');
+      setSnackbarMessage(err.response?.data?.error || 'Failed to generate utility bills');
       setSnackbarOpen(true);
     }
   };
@@ -365,7 +417,7 @@ const BuildingDetailsScreen = () => {
         backupGeneratorCharge: Number(editFormData.backupGeneratorCharge),
         status: editFormData.status,
       };
-      await axios.put(`${BASE_URL}/units/${unit.id}`, payload, {
+      await axios.post(`${BASE_URL}/units`, payload, {
         withCredentials: true,
       });
       setSnackbarMessage('Unit updated successfully.');
@@ -496,11 +548,10 @@ const BuildingDetailsScreen = () => {
       width: 120,
       renderCell: (params) => (
         <Button
-          //variant="outlined"
           size="small"
           onClick={() => handleOpenAssignDialog(params.row)}
           disabled={params.row.status === 'OCCUPIED'}
-          startIcon={<AddIcon  color='action' />}
+          startIcon={<AddIcon color="action" />}
           color={theme?.palette?.grey[300]}
         >
           Assign
@@ -552,599 +603,700 @@ const BuildingDetailsScreen = () => {
 
   return (
     <ThemeProvider theme={theme}>
-      <Container maxWidth="lg" sx={{ minHeight: '100vh', py: 4 }}>
-        {/* Enhanced Header */}
-        <AppBar position="static"  elevation={1} sx={{ mb: 4, borderRadius: 2 }}>
-          <Toolbar>
-            <IconButton edge="start" onClick={() => navigate (-1)} sx={{ mr: 2 }}>
-              <ArrowBackIcon />
-            </IconButton>
-            <Box sx={{ flexGrow: 1 }}>
-              <Typography variant="h4" component="h1">
-                {sanitizedBuilding?.buildingName || 'Building Details'}
-              </Typography>
-              <Breadcrumbs aria-label="breadcrumb" sx={{ mt: 1 }}>
-                <Link to="/properties" style={{ textDecoration: 'none',  }}>
-                  Buildings
-                </Link>
-                <Typography >{sanitizedBuilding?.buildingName || 'Details'}</Typography>
-              </Breadcrumbs>
+      <LocalizationProvider dateAdapter={AdapterDateFns}>
+        <Container maxWidth="lg" sx={{ minHeight: '100vh', py: 4 }}>
+          {/* Enhanced Header */}
+          <AppBar position="static" elevation={1} sx={{ mb: 4, borderRadius: 2 }}>
+            <Toolbar>
+              <IconButton edge="start" onClick={() => navigate(-1)} sx={{ mr: 2 }}>
+                <ArrowBackIcon />
+              </IconButton>
+              <Box sx={{ flexGrow: 1 }}>
+                <Typography variant="h4" component="h1">
+                  {sanitizedBuilding?.buildingName || 'Building Details'}
+                </Typography>
+                <Breadcrumbs aria-label="breadcrumb" sx={{ mt: 1 }}>
+                  <Link to="/properties" style={{ textDecoration: 'none' }}>
+                    Buildings
+                  </Link>
+                  <Typography>{sanitizedBuilding?.buildingName || 'Details'}</Typography>
+                </Breadcrumbs>
+              </Box>
+            </Toolbar>
+          </AppBar>
+
+          {loading ? (
+            <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
+              <CircularProgress size={40} />
+              <Typography sx={{ ml: 2 }}>Loading building details...</Typography>
             </Box>
-          </Toolbar>
-        </AppBar>
-
-        {loading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '60vh' }}>
-            <CircularProgress size={40} />
-            <Typography sx={{ ml: 2 }}>Loading building details...</Typography>
-          </Box>
-        ) : error ? (
-          <Paper sx={{ p: 4, textAlign: 'center',  }}>
-            <Typography color="error">{error}</Typography>
-          </Paper>
-        ) : !sanitizedBuilding ? (
-          <Paper sx={{ p: 4, textAlign: 'center' }}>
-            <Typography>No building data available</Typography>
-          </Paper>
-        ) : (
-          <ErrorBoundary>
-            {/* Building Details Card */}
-            <Card sx={{ mb: 4 }}>
-              <CardContent>
-                <Grid container spacing={3}>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="body1">
-                      <strong>Address:</strong> {sanitizedBuilding.address}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Total Units:</strong> {sanitizedBuilding.unitCount}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Management Rate:</strong> %{sanitizedBuilding.managementRate.toFixed(2)}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Gas Rate:</strong> ksh{sanitizedBuilding.gasRate.toFixed(2)}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Water Rate:</strong> ksh{sanitizedBuilding.waterRate.toFixed(2)}
-                    </Typography>
-                  </Grid>
-                  <Grid item xs={12} sm={6}>
-                    <Typography variant="body1">
-                      <strong>Landlord:</strong> {sanitizedBuilding.landlord.name}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Landlord Email:</strong> {sanitizedBuilding.landlord.email}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Landlord Phone:</strong> {sanitizedBuilding.landlord.phoneNumber}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Created At:</strong>{' '}
-                      {new Date(sanitizedBuilding.createdAt).toLocaleDateString('en-US', {
-                        year: 'numeric',
-                        month: 'short',
-                        day: 'numeric',
-                      })}
-                    </Typography>
-                  </Grid>
-                </Grid>
-                <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 3, gap: 2 }}>
-                  <Button
-                    component={Link}
-                    to={`/edit-building/${id}`}
-                    variant="contained"
-                    color={theme.palette.greenAccent.main}
-                    startIcon={<EditIcon />}
-                  >
-                    Edit Property
-                  </Button>
-                  <Button
-                    variant="contained"
-                    color={theme.palette.greenAccent.main}
-                    onClick={() => setExpenseModalOpen(true)}
-                    startIcon={<AddIcon />}
-                  >
-                    Raise Repair Expense
-                  </Button>
-                </Box>
-              </CardContent>
-            </Card>
-
-            {/* Units Section */}
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <ApartmentIcon /> Units ({sanitizedBuilding.units.length})
-              </Typography>
-              <Button
-                variant="contained"
-                color= {theme.palette.greenAccent.main}
-
-                
-                onClick={handleAddUnit}
-                disabled={!building?.id}
-                startIcon={<AddIcon />}
-              >
-                Add Unit
-              </Button>
-            </Box>
-            <Paper sx={{ mb: 4 }}>
-              <DataGrid
-                rows={sanitizedBuilding.units}
-                columns={unitColumns}
-                getRowId={(row) => row.id}
-                initialState={{
-                  pagination: { paginationModel: { pageSize: 5 } },
-                }}
-                pageSizeOptions={[5, 10, 20]}
-                disableRowSelectionOnClick
-                autoHeight
-                slots={{
-                  toolbar: () => (
-                    <GridToolbarContainer>
-                      <GridToolbarExport />
-                    </GridToolbarContainer>
-                  ),
-                }}
-              />
+          ) : error ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography color="error">{error}</Typography>
             </Paper>
-
-            {/* Customers Section */}
-            {selectedUnit && unitCustomers.length > 0 && (
-              <>
-                <Typography variant="h6" sx={{ mt: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <PeopleIcon /> Customers in Unit {selectedUnit.unitNumber}
-                </Typography>
-                <Paper sx={{ mb: 4 }}>
-                  <DataGrid
-                    rows={unitCustomers.map((c) => ({
-                      id: c.id,
-                      fullName: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
-                      phoneNumber: c.phoneNumber,
-                      email: c.email,
-                      status: c.isActive ? 'Active' : 'Inactive',
-                      startDate: c.startDate ? new Date(c.startDate).toLocaleDateString() : 'N/A',
-                    }))}
-                    columns={[
-                      { field: 'fullName', headerName: 'Name', width: 180 },
-                      { field: 'email', headerName: 'Email', width: 200 },
-                      { field: 'phoneNumber', headerName: 'Phone Number', width: 160 },
-                      {
-                        field: 'status',
-                        headerName: 'Status',
-                        width: 120,
-                        renderCell: (params) => (
-                          <Chip label={params.value} color={params.value === 'Active' ? 'success' : 'default'} size="small" />
-                        ),
-                      },
-                    ]}
-                    getRowId={(row) => row.id}
-                    autoHeight
-                    hideFooterPagination
-                  />
-                </Paper>
-              </>
-            )}
-
-            {/* Add Unit Modal */}
-            <Modal open={openModal} onClose={handleCloseModal}>
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: 400,
-                  
-                  p: 4,
-                  borderRadius: 2,
-                }}
-              >
-                <Typography variant="h6" gutterBottom>
-                  Add New Unit
-                </Typography>
-                {formError && (
-                  <Typography color="error" sx={{ mb: 2 }}>
-                    {formError}
-                  </Typography>
-                )}
-                <form onSubmit={handleFormSubmit}>
-                  <TextField
-                    label="Unit Number"
-                    name="unitNumber"
-                    value={unitForm.unitNumber}
-                    onChange={handleFormChange}
-                    fullWidth
-                    margin="normal"
-                    required
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Monthly Charge (ksh)"
-                    name="monthlyCharge"
-                    value={unitForm.monthlyCharge}
-                    onChange={handleFormChange}
-                    fullWidth
-                    margin="normal"
-                    type="number"
-                    required
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Deposit Amount (ksh)"
-                    name="depositAmount"
-                    value={unitForm.depositAmount}
-                    onChange={handleFormChange}
-                    fullWidth
-                    margin="normal"
-                    type="number"
-                    required
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Garbage Charge (ksh)"
-                    name="garbageCharge"
-                    value={unitForm.garbageCharge}
-                    onChange={handleFormChange}
-                    fullWidth
-                    margin="normal"
-                    type="number"
-                    required
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Service Charge (ksh)"
-                    name="serviceCharge"
-                    value={unitForm.serviceCharge}
-                    onChange={handleFormChange}
-                    fullWidth
-                    margin="normal"
-                    type="number"
-                    required
-                    variant="outlined"
-                  />
-                  <FormControl fullWidth margin="normal">
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      name="status"
-                      value={unitForm.status}
-                      onChange={handleFormChange}
-                      label="Status"
-                      variant="outlined"
+          ) : !sanitizedBuilding ? (
+            <Paper sx={{ p: 4, textAlign: 'center' }}>
+              <Typography>No building data available</Typography>
+            </Paper>
+          ) : (
+            <ErrorBoundary>
+              {/* Building Details Card */}
+              <Card sx={{ mb: 4 }}>
+                <CardContent>
+                  <Grid container spacing={3}>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1">
+                        <strong>Address:</strong> {sanitizedBuilding.address}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Total Units:</strong> {sanitizedBuilding.unitCount}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Management Rate:</strong> %{sanitizedBuilding.managementRate.toFixed(2)}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Gas Rate:</strong> ksh{sanitizedBuilding.gasRate.toFixed(2)}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Water Rate:</strong> ksh{sanitizedBuilding.waterRate.toFixed(2)}
+                      </Typography>
+                    </Grid>
+                    <Grid item xs={12} sm={6}>
+                      <Typography variant="body1">
+                        <strong>Landlord:</strong> {sanitizedBuilding.landlord.name}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Landlord Email:</strong> {sanitizedBuilding.landlord.email}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Landlord Phone:</strong> {sanitizedBuilding.landlord.phoneNumber}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Created At:</strong>{' '}
+                        {new Date(sanitizedBuilding.createdAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric',
+                        })}
+                      </Typography>
+                    </Grid>
+                  </Grid>
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-start', mt: 3, gap: 2 }}>
+                    <Button
+                      component={Link}
+                      to={`/edit-building/${id}`}
+                      variant="contained"
+                      color={theme.palette.greenAccent.main}
+                      startIcon={<EditIcon />}
                     >
-                      <MenuItem value="VACANT">Vacant</MenuItem>
-                      <MenuItem value="OCCUPIED">Occupied</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
-                    <Button onClick={handleCloseModal} variant="outlined">
-                      Cancel
+                      Edit Property
                     </Button>
-                    <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
-                      Add Unit
+                    <Button
+                      variant="contained"
+                      color={theme.palette.greenAccent.main}
+                      onClick={() => setExpenseModalOpen(true)}
+                      startIcon={<AddIcon />}
+                    >
+                      Raise Repair Expense
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color={theme.palette.greenAccent.main}
+                      onClick={() => setUtilityBillModalOpen(true)}
+                      startIcon={<AddIcon />}
+                    >
+                      Generate Utility Bill
                     </Button>
                   </Box>
-                </form>
-              </Box>
-            </Modal>
+                </CardContent>
+              </Card>
 
-            {/* Edit Unit Dialog */}
-            <Dialog open={editUnitOpen} onClose={handleCloseEditUnit} maxWidth="sm" fullWidth>
-              <DialogTitle>Edit Unit</DialogTitle>
-              <DialogContent>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                  <TextField
-                    label="Unit Number"
-                    name="unitNumber"
-                    value={editFormData.unitNumber}
-                    onChange={handleInputChange}
-                    required
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Monthly Charge (ksh)"
-                    name="monthlyCharge"
-                    type="number"
-                    value={editFormData.monthlyCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Deposit Amount (ksh)"
-                    name="depositAmount"
-                    type="number"
-                    value={editFormData.depositAmount}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Garbage Charge (ksh)"
-                    name="garbageCharge"
-                    type="number"
-                    value={editFormData.garbageCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Service Charge (ksh)"
-                    name="serviceCharge"
-                    type="number"
-                    value={editFormData.serviceCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Security Charge (ksh)"
-                    name="securityCharge"
-                    type="number"
-                    value={editFormData.securityCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Amenities Charge (ksh)"
-                    name="amenitiesCharge"
-                    type="number"
-                    value={editFormData.amenitiesCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Backup Generator Charge (ksh)"
-                    name="backupGeneratorCharge"
-                    type="number"
-                    value={editFormData.backupGeneratorCharge}
-                    onChange={handleInputChange}
-                    fullWidth
-                    variant="outlined"
-                  />
-                  <FormControl fullWidth>
-                    <InputLabel>Status</InputLabel>
-                    <Select
-                      name="status"
-                      value={editFormData.status}
-                      onChange={handleInputChange}
+              {/* Units Section */}
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <ApartmentIcon /> Units ({sanitizedBuilding.units.length})
+                </Typography>
+                <Button
+                  variant="contained"
+                  color={theme.palette.greenAccent.main}
+                  onClick={handleAddUnit}
+                  disabled={!building?.id}
+                  startIcon={<AddIcon />}
+                >
+                  Add Unit
+                </Button>
+              </Box>
+              <Paper sx={{ mb: 4 }}>
+                <DataGrid
+                  rows={sanitizedBuilding.units}
+                  columns={unitColumns}
+                  getRowId={(row) => row.id}
+                  initialState={{
+                    pagination: { paginationModel: { pageSize: 5 } },
+                  }}
+                  pageSizeOptions={[5, 10, 20]}
+                  disableRowSelectionOnClick
+                  autoHeight
+                  slots={{
+                    toolbar: () => (
+                      <GridToolbarContainer>
+                        <GridToolbarExport />
+                      </GridToolbarContainer>
+                    ),
+                  }}
+                />
+              </Paper>
+
+              {/* Customers Section */}
+              {selectedUnit && unitCustomers.length > 0 && (
+                <>
+                  <Typography variant="h6" sx={{ mt: 4, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <PeopleIcon /> Customers in Unit {selectedUnit.unitNumber}
+                  </Typography>
+                  <Paper sx={{ mb: 4 }}>
+                    <DataGrid
+                      rows={unitCustomers.map((c) => ({
+                        id: c.id,
+                        fullName: c.fullName || `${c.firstName || ''} ${c.lastName || ''}`.trim(),
+                        phoneNumber: c.phoneNumber,
+                        email: c.email,
+                        status: c.isActive ? 'Active' : 'Inactive',
+                        startDate: c.startDate ? new Date(c.startDate).toLocaleDateString() : 'N/A',
+                      }))}
+                      columns={[
+                        { field: 'fullName', headerName: 'Name', width: 180 },
+                        { field: 'email', headerName: 'Email', width: 200 },
+                        { field: 'phoneNumber', headerName: 'Phone Number', width: 160 },
+                        {
+                          field: 'status',
+                          headerName: 'Status',
+                          width: 120,
+                          renderCell: (params) => (
+                            <Chip label={params.value} color={params.value === 'Active' ? 'success' : 'default'} size="small" />
+                          ),
+                        },
+                      ]}
+                      getRowId={(row) => row.id}
+                      autoHeight
+                      hideFooterPagination
+                    />
+                  </Paper>
+                </>
+              )}
+
+              {/* Add Unit Modal */}
+              <Modal open={openModal} onClose={handleCloseModal}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 400,
+                    bgcolor: 'background.paper',
+                    boxShadow: 24,
+                    p: 4,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    Add New Unit
+                  </Typography>
+                  {formError && (
+                    <Typography color="error" sx={{ mb: 2 }}>
+                      {formError}
+                    </Typography>
+                  )}
+                  <form onSubmit={handleFormSubmit}>
+                    <TextField
+                      label="Unit Number"
+                      name="unitNumber"
+                      value={unitForm.unitNumber}
+                      onChange={handleFormChange}
+                      fullWidth
+                      margin="normal"
                       required
                       variant="outlined"
-                    >
-                      <MenuItem value="VACANT">Vacant</MenuItem>
-                      <MenuItem value="OCCUPIED">Occupied</MenuItem>
-                      <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
-                      <MenuItem value="OCCUPIED_PENDING_PAYMENT">Occupied Pending Payment</MenuItem>
-                    </Select>
-                  </FormControl>
-                </Box>
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={handleUpdateUnit} variant="contained" color="primary" disabled={unitsLoading}>
-                  {unitsLoading ? 'Saving...' : 'Save'}
-                </Button>
-                <Button onClick={handleCloseEditUnit} variant="outlined" disabled={unitsLoading}>
-                  Cancel
-                </Button>
-              </DialogActions>
-            </Dialog>
-
-            {/* Assign Unit Dialog */}
-            <Dialog open={assignDialogOpen} onClose={handleCloseAssignDialog} maxWidth="sm" fullWidth>
-              <DialogTitle>Assign Unit to Customer</DialogTitle>
-              <DialogContent>
-                <Box sx={{ mt: 2 }}>
-                  <Typography variant="subtitle1" gutterBottom>
-                    Assigning: {selectedUnitForAssign?.unitNumber}
-                  </Typography>
-                  <TextField
-                    fullWidth
-                    label="Search Customer by Name or Phone"
-                    value={searchQuery}
-                    onChange={(e) => {
-                      setSearchQuery(e.target.value);
-                      handleSearch(e.target.value);
-                    }}
-                    sx={{ mb: 2 }}
-                    variant="outlined"
-                  />
-                  {isSearching && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto' }} />}
-                  {searchResults.length > 0 && (
-                    <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
-                      <Typography variant="subtitle2" gutterBottom>
-                        Search Results:
-                      </Typography>
-                      {searchResults.map((customer) => (
-                        <Paper key={customer.id} sx={{ p: 2, mb: 1, borderRadius: 2 }}>
-                          <Typography>
-                            <strong>Name:</strong> {customer.firstName} {customer.lastName}
-                          </Typography>
-                          <Typography>
-                            <strong>Phone:</strong> {customer.phoneNumber}
-                          </Typography>
-                          <Typography>
-                            <strong>Email:</strong> {customer.email || 'N/A'}
-                          </Typography>
-                          <Button
-                            variant="contained"
-                            size="small"
-                            onClick={() => handleAssignUnit(customer.id)}
-                            sx={{ mt: 1 }}
-                          >
-                            Assign to This Customer
-                          </Button>
-                        </Paper>
-                      ))}
-                    </Box>
-                  )}
-                </Box>
-              </DialogContent>
-              <DialogActions>
-                <Button onClick={handleCloseAssignDialog} variant="outlined">
-                  Cancel
-                </Button>
-              </DialogActions>
-            </Dialog>
-
-            {/* Expense Modal */}
-            <Modal open={expenseModalOpen} onClose={() => setExpenseModalOpen(false)}>
-              <Box
-                sx={{
-                  position: 'absolute',
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  width: 400,
-                  
-                  p: 4,
-                  borderRadius: 2,
-                }}
-              >
-                <Typography variant="h6" gutterBottom>
-                  Raise Repair Expense
-                </Typography>
-                <form onSubmit={handleExpenseSubmit}>
-                  <FormControl fullWidth margin="normal">
-                    <InputLabel>Expense Type</InputLabel>
-                    <Select
-                      name="expenseType"
-                      value={expenseForm.expenseType}
-                      onChange={handleExpenseFormChange}
-                      label="Expense Type"
+                    />
+                    <TextField
+                      label="Monthly Charge (ksh)"
+                      name="monthlyCharge"
+                      value={unitForm.monthlyCharge}
+                      onChange={handleFormChange}
+                      fullWidth
+                      margin="normal"
+                      type="number"
+                      required
                       variant="outlined"
-                    >
-                      <MenuItem value="REPAIR">Repair</MenuItem>
-                      <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
-                      <MenuItem value="UTILITY">Utility</MenuItem>
-                      <MenuItem value="OTHER">Other</MenuItem>
-                    </Select>
-                  </FormControl>
-                  <TextField
-                    label="Amount (ksh)"
-                    name="amount"
-                    type="number"
-                    value={expenseForm.amount}
-                    onChange={handleExpenseFormChange}
-                    fullWidth
-                    margin="normal"
-                    required
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Description"
-                    name="description"
-                    value={expenseForm.description}
-                    onChange={handleExpenseFormChange}
-                    fullWidth
-                    margin="normal"
-                    required
-                    multiline
-                    rows={3}
-                    variant="outlined"
-                  />
-                  <TextField
-                    label="Date"
-                    name="date"
-                    type="date"
-                    value={expenseForm.date}
-                    onChange={handleExpenseFormChange}
-                    fullWidth
-                    margin="normal"
-                    required
-                    InputLabelProps={{ shrink: true }}
-                    variant="outlined"
-                  />
-                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
-                    <Button onClick={() => setExpenseModalOpen(false)} variant="outlined">
-                      Cancel
-                    </Button>
-                    <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
-                      Submit Expense
-                    </Button>
-                  </Box>
-                </form>
-              </Box>
-            </Modal>
+                    />
+                    <TextField
+                      label="Deposit Amount (ksh)"
+                      name="depositAmount"
+                      value={unitForm.depositAmount}
+                      onChange={handleFormChange}
+                      fullWidth
+                      margin="normal"
+                      type="number"
+                      required
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Garbage Charge (ksh)"
+                      name="garbageCharge"
+                      value={unitForm.garbageCharge}
+                      onChange={handleFormChange}
+                      fullWidth
+                      margin="normal"
+                      type="number"
+                      required
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Service Charge (ksh)"
+                      name="serviceCharge"
+                      value={unitForm.serviceCharge}
+                      onChange={handleFormChange}
+                      fullWidth
+                      margin="normal"
+                      type="number"
+                      required
+                      variant="outlined"
+                    />
+                    <FormControl fullWidth margin="normal">
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        name="status"
+                        value={unitForm.status}
+                        onChange={handleFormChange}
+                        label="Status"
+                        variant="outlined"
+                      >
+                        <MenuItem value="VACANT">Vacant</MenuItem>
+                        <MenuItem value="OCCUPIED">Occupied</MenuItem>
+                      </Select>
+                    </FormControl>
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+                      <Button onClick={handleCloseModal} variant="outlined">
+                        Cancel
+                      </Button>
+                      <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
+                        Add Unit
+                      </Button>
+                    </Box>
+                  </form>
+                </Box>
+              </Modal>
 
-            {/* View Unit Dialog */}
-            <Dialog open={viewUnitOpen} onClose={handleCloseViewUnit} maxWidth="sm" fullWidth>
-              <
-
-DialogTitle>Unit Details</DialogTitle>
-              <DialogContent>
-                {selectedUnit ? (
+              {/* Edit Unit Dialog */}
+              <Dialog open={editUnitOpen} onClose={handleCloseEditUnit} maxWidth="sm" fullWidth>
+                <DialogTitle>Edit Unit</DialogTitle>
+                <DialogContent>
                   <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
-                    <Typography variant="body1">
-                      <strong>Unit Number:</strong> {selectedUnit.unitNumber}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Monthly Charge:</strong> ksh{selectedUnit.monthlyCharge}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Deposit Amount:</strong> ksh{selectedUnit.depositAmount}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Garbage Charge:</strong> ksh{selectedUnit.garbageCharge || 'N/A'}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Service Charge:</strong> ksh{selectedUnit.serviceCharge || 'N/A'}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Security Charge:</strong> ksh{selectedUnit.securityCharge || 'N/A'}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Amenities Charge:</strong> ksh{selectedUnit.amenitiesCharge || 'N/A'}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Backup Generator Charge:</strong> ksh{selectedUnit.backupGeneratorCharge || 'N/A'}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Status:</strong>{' '}
-                      <Chip label={selectedUnit.status} color={selectedUnit.status === 'OCCUPIED' ? 'success' : 'warning'} size="small" />
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}
-                    </Typography>
-                    <Typography variant="body1">
-                      <strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}
-                    </Typography>
+                    <TextField
+                      label="Unit Number"
+                      name="unitNumber"
+                      value={editFormData.unitNumber}
+                      onChange={handleInputChange}
+                      required
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Monthly Charge (ksh)"
+                      name="monthlyCharge"
+                      type="number"
+                      value={editFormData.monthlyCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Deposit Amount (ksh)"
+                      name="depositAmount"
+                      type="number"
+                      value={editFormData.depositAmount}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Garbage Charge (ksh)"
+                      name="garbageCharge"
+                      type="number"
+                      value={editFormData.garbageCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Service Charge (ksh)"
+                      name="serviceCharge"
+                      type="number"
+                      value={editFormData.serviceCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Security Charge (ksh)"
+                      name="securityCharge"
+                      type="number"
+                      value={editFormData.securityCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Amenities Charge (ksh)"
+                      name="amenitiesCharge"
+                      type="number"
+                      value={editFormData.amenitiesCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Backup Generator Charge (ksh)"
+                      name="backupGeneratorCharge"
+                      type="number"
+                      value={editFormData.backupGeneratorCharge}
+                      onChange={handleInputChange}
+                      fullWidth
+                      variant="outlined"
+                    />
+                    <FormControl fullWidth>
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        name="status"
+                        value={editFormData.status}
+                        onChange={handleInputChange}
+                        required
+                        variant="outlined"
+                      >
+                        <MenuItem value="VACANT">Vacant</MenuItem>
+                        <MenuItem value="OCCUPIED">Occupied</MenuItem>
+                        <MenuItem value="MAINTENANCE">Maintenance</MenuItem>
+                        <MenuItem value="OCCUPIED_PENDING_PAYMENT">Occupied Pending Payment</MenuItem>
+                      </Select>
+                    </FormControl>
                   </Box>
-                ) : (
-                  <Typography>Loading unit details...</Typography>
-                )}
-              </DialogContent>
-              <DialogActions>
-                <Button
-                  onClick={() => {
-                    handleCloseViewUnit();
-                    setEditUnitOpen(true);
-                  }}
-                  variant="contained"
-                  color="primary"
-                  disabled={unitsLoading}
-                >
-                  Edit
-                </Button>
-                <Button onClick={handleCloseViewUnit} variant="outlined" disabled={unitsLoading}>
-                  Close
-                </Button>
-              </DialogActions>
-            </Dialog>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={handleUpdateUnit} variant="contained" color="primary" disabled={unitsLoading}>
+                    {unitsLoading ? 'Saving...' : 'Save'}
+                  </Button>
+                  <Button onClick={handleCloseEditUnit} variant="outlined" disabled={unitsLoading}>
+                    Cancel
+                  </Button>
+                </DialogActions>
+              </Dialog>
 
-            {/* Snackbar */}
-            <Snackbar
-              open={snackbarOpen}
-              autoHideDuration={3000}
-              onClose={() => setSnackbarOpen(false)}
-              message={snackbarMessage}
-              anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-            />
-          </ErrorBoundary>
-        )}
-      </Container>
+              {/* Assign Unit Dialog */}
+              <Dialog open={assignDialogOpen} onClose={handleCloseAssignDialog} maxWidth="sm" fullWidth>
+                <DialogTitle>Assign Unit to Customer</DialogTitle>
+                <DialogContent>
+                  <Box sx={{ mt: 2 }}>
+                    <Typography variant="subtitle1" gutterBottom>
+                      Assigning: {selectedUnitForAssign?.unitNumber}
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      label="Search Customer by Name or Phone"
+                      value={searchQuery}
+                      onChange={(e) => {
+                        setSearchQuery(e.target.value);
+                        handleSearch(e.target.value);
+                      }}
+                      sx={{ mb: 2 }}
+                      variant="outlined"
+                    />
+                    {isSearching && <CircularProgress size={24} sx={{ display: 'block', mx: 'auto' }} />}
+                    {searchResults.length > 0 && (
+                      <Box sx={{ maxHeight: 300, overflow: 'auto' }}>
+                        <Typography variant="subtitle2" gutterBottom>
+                          Search Results:
+                        </Typography>
+                        {searchResults.map((customer) => (
+                          <Paper key={customer.id} sx={{ p: 2, mb: 1, borderRadius: 2 }}>
+                            <Typography>
+                              <strong>Name:</strong> {customer.firstName} {customer.lastName}
+                            </Typography>
+                            <Typography>
+                              <strong>Phone:</strong> {customer.phoneNumber}
+                            </Typography>
+                            <Typography>
+                              <strong>Email:</strong> {customer.email || 'N/A'}
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              size="small"
+                              onClick={() => handleAssignUnit(customer.id)}
+                              sx={{ mt: 1 }}
+                            >
+                              Assign to This Customer
+                            </Button>
+                          </Paper>
+                        ))}
+                      </Box>
+                    )}
+                  </Box>
+                </DialogContent>
+                <DialogActions>
+                  <Button onClick={handleCloseAssignDialog} variant="outlined">
+                    Cancel
+                  </Button>
+                </DialogActions>
+              </Dialog>
+
+              {/* Expense Modal */}
+              <Modal open={expenseModalOpen} onClose={() => setExpenseModalOpen(false)}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 400,
+                    bgcolor: 'background.paper',
+                    boxShadow: 24,
+                    p: 4,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    Raise Repair Expense
+                  </Typography>
+                  <form onSubmit={handleExpenseSubmit}>
+                    <FormControl fullWidth margin="normal">
+                      <InputLabel>Expense Type</InputLabel>
+                      <Select
+                        name="expenseType"
+                        value={expenseForm.expenseType}
+                        onChange={handleExpenseFormChange}
+                        label="Expense Type"
+                        variant="outlined"
+                      >
+                        <MenuItem value="ELECTRICITY">ELECTRICITY</MenuItem>
+                        <MenuItem value="WATER">WATER</MenuItem>
+                        <MenuItem value="SHARED_UTILITY">Utility</MenuItem>
+                        
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      label="Amount (ksh)"
+                      name="amount"
+                      type="number"
+                      value={expenseForm.amount}
+                      onChange={handleExpenseFormChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Description"
+                      name="description"
+                      value={expenseForm.description}
+                      onChange={handleExpenseFormChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      multiline
+                      rows={3}
+                      variant="outlined"
+                    />
+                    <TextField
+                      label="Date"
+                      name="date"
+                      type="date"
+                      value={expenseForm.date}
+                      onChange={handleExpenseFormChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      InputLabelProps={{ shrink: true }}
+                      variant="outlined"
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+                      <Button onClick={() => setExpenseModalOpen(false)} variant="outlined">
+                        Cancel
+                      </Button>
+                      <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
+                        Submit Expense
+                      </Button>
+                    </Box>
+                  </form>
+                </Box>
+              </Modal>
+
+              {/* Utility Bill Modal */}
+              <Modal open={utilityBillModalOpen} onClose={() => setUtilityBillModalOpen(false)}>
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    width: 400,
+                    bgcolor: 'background.paper',
+                    boxShadow: 24,
+                    p: 4,
+                    borderRadius: 2,
+                  }}
+                >
+                  <Typography variant="h6" gutterBottom>
+                    Generate Utility Bill
+                  </Typography>
+                  {utilityBillFormError && (
+                    <Typography color="error" sx={{ mb: 2 }}>
+                      {utilityBillFormError}
+                    </Typography>
+                  )}
+                  <form onSubmit={handleUtilityBillSubmit}>
+                    <FormControl fullWidth margin="normal">
+                      <InputLabel>Invoice Type</InputLabel>
+                      <Select
+                        name="invoiceType"
+                        value={utilityBillForm.invoiceType}
+                        onChange={handleUtilityBillFormChange}
+                        label="Invoice Type"
+                        variant="outlined"
+                      >
+                        <MenuItem value="SHARED_UTILITY">Utility</MenuItem>
+                        <MenuItem value="WATER">Water</MenuItem>
+                        <MenuItem value="ELECTRICITY">Electricity</MenuItem>
+                        
+                      </Select>
+                    </FormControl>
+                    <TextField
+                      label="Amount (ksh)"
+                      name="amount"
+                      type="number"
+                      value={utilityBillForm.amount}
+                      onChange={handleUtilityBillFormChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      variant="outlined"
+                      inputProps={{ step: '0.01' }}
+                    />
+                    <TextField
+                      label="Description"
+                      name="description"
+                      value={utilityBillForm.description}
+                      onChange={handleUtilityBillFormChange}
+                      fullWidth
+                      margin="normal"
+                      required
+                      multiline
+                      rows={3}
+                      variant="outlined"
+                    />
+                    <DatePicker
+                      label="Invoice Period"
+                      views={['month', 'year']}
+                      value={utilityBillForm.invoicePeriod}
+                      onChange={(newValue) =>
+                        setUtilityBillForm((prev) => ({ ...prev, invoicePeriod: newValue }))
+                      }
+                      renderInput={(params) => (
+                        <TextField
+                          {...params}
+                          fullWidth
+                          margin="normal"
+                          required
+                          variant="outlined"
+                          helperText="Select month and year"
+                        />
+                      )}
+                    />
+                    <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3, gap: 2 }}>
+                      <Button onClick={() => setUtilityBillModalOpen(false)} variant="outlined">
+                        Cancel
+                      </Button>
+                      <Button type="submit" variant="contained" color={theme?.palette?.greenAccent?.main}>
+                        Generate Bills
+                      </Button>
+                    </Box>
+                  </form>
+                </Box>
+              </Modal>
+
+              {/* View Unit Dialog */}
+              <Dialog open={viewUnitOpen} onClose={handleCloseViewUnit} maxWidth="sm" fullWidth>
+                <DialogTitle>Unit Details</DialogTitle>
+                <DialogContent>
+                  {selectedUnit ? (
+                    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                      <Typography variant="body1">
+                        <strong>Unit Number:</strong> {selectedUnit.unitNumber}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Monthly Charge:</strong> ksh{selectedUnit.monthlyCharge}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Deposit Amount:</strong> ksh{selectedUnit.depositAmount}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Garbage Charge:</strong> ksh{selectedUnit.garbageCharge || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Service Charge:</strong> ksh{selectedUnit.serviceCharge || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Security Charge:</strong> ksh{selectedUnit.securityCharge || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Amenities Charge:</strong> ksh{selectedUnit.amenitiesCharge || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Backup Generator Charge:</strong> ksh{selectedUnit.backupGeneratorCharge || 'N/A'}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Status:</strong>{' '}
+                        <Chip label={selectedUnit.status} color={selectedUnit.status === 'OCCUPIED' ? 'success' : 'warning'} size="small" />
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Created At:</strong> {new Date(selectedUnit.createdAt).toLocaleString()}
+                      </Typography>
+                      <Typography variant="body1">
+                        <strong>Updated At:</strong> {new Date(selectedUnit.updatedAt).toLocaleString()}
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <Typography>Loading unit details...</Typography>
+                  )}
+                </DialogContent>
+                <DialogActions>
+                  <Button
+                    onClick={() => {
+                      handleCloseViewUnit();
+                      setEditUnitOpen(true);
+                    }}
+                    variant="contained"
+                    color="primary"
+                    disabled={unitsLoading}
+                  >
+                    Edit
+                  </Button>
+                  <Button onClick={handleCloseViewUnit} variant="outlined" disabled={unitsLoading}>
+                    Close
+                  </Button>
+                </DialogActions>
+              </Dialog>
+
+              {/* Snackbar */}
+              <Snackbar
+                open={snackbarOpen}
+                autoHideDuration={3000}
+                onClose={() => setSnackbarOpen(false)}
+                message={snackbarMessage}
+                anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+              />
+            </ErrorBoundary>
+          )}
+        </Container>
+      </LocalizationProvider>
     </ThemeProvider>
   );
 };

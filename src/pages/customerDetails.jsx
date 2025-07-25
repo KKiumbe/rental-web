@@ -35,11 +35,21 @@ import EditIcon from "@mui/icons-material/Edit";
 import { useAuthStore } from "../store/authStore";
 import { getTheme } from "../store/theme";
 
+// Mock theme for fallback
+const fallbackTheme = {
+  palette: {
+    greenAccent: { main: "#4caf50" },
+    background: { paper: "#fff" },
+    grey: { 100: "#f5f5f5" },
+    secondary: { contrastText: "#000" },
+  },
+};
+
 const CustomerDetails = () => {
   const { id } = useParams();
   const navigate = useNavigate();
   const currentUser = useAuthStore((state) => state.currentUser);
-  const theme = getTheme();
+  const theme = getTheme() || fallbackTheme; // Use fallback if getTheme fails
   const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:3000/api";
   const [customer, setCustomer] = useState(null);
   const [tabIndex, setTabIndex] = useState(0);
@@ -95,7 +105,7 @@ const CustomerDetails = () => {
     try {
       await axios.post(
         `${BASEURL}/send-sms`,
-        { mobile: customer.phoneNumber, message: smsMessage },
+        { mobile: customer?.phoneNumber, message: smsMessage },
         { withCredentials: true }
       );
       setSuccess("SMS sent successfully");
@@ -115,7 +125,7 @@ const CustomerDetails = () => {
     try {
       await axios.post(
         `${BASEURL}/send-bill`,
-        { customerId: customer.id },
+        { customerId: customer?.id },
         { withCredentials: true }
       );
       setSuccess("Invoice sent successfully");
@@ -151,7 +161,7 @@ const CustomerDetails = () => {
     try {
       await axios.post(
         `${BASEURL}/active-customer`,
-        { customerId: customer.id },
+        { customerId: customer?.id },
         { withCredentials: true }
       );
       setCustomer((prev) => ({ ...prev, status: "ACTIVE" }));
@@ -183,8 +193,7 @@ const CustomerDetails = () => {
     try {
       const formData = new FormData();
       formData.append("leaseFile", leaseFile);
-      formData.append("customerId", customer.id);
-
+      formData.append("customerId", customer?.id);
       await axios.post(`${BASEURL}/upload-lease`, formData, {
         withCredentials: true,
         headers: { "Content-Type": "multipart/form-data" },
@@ -215,7 +224,7 @@ const CustomerDetails = () => {
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", `lease_${customer.firstName}_${customer.lastName}.pdf`);
+      link.setAttribute("download", `lease_${customer?.firstName}_${customer?.lastName}.pdf`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -286,7 +295,7 @@ const CustomerDetails = () => {
       width: 300,
       renderCell: (params) => (
         <ul style={{ margin: 0, paddingLeft: "20px" }}>
-          {params.value.map((item) => (
+          {params.value?.map((item) => (
             <li key={item.id}>
               {item.description} - {item.quantity} x {item.amount} KES
             </li>
@@ -309,45 +318,39 @@ const CustomerDetails = () => {
     },
   ];
 
-  // DataGrid columns for Receipts
-  const receiptColumns = [
+  // DataGrid columns for Payments (replacing Receipts)
+  const paymentColumns = [
     {
       field: "actions",
       headerName: "View",
       width: 100,
       renderCell: (params) => (
-        <IconButton component={Link} to={`/receipts/${params.row.id}`}>
+        <IconButton component={Link} to={`/payments/${params.row.id}`}>
           <VisibilityIcon sx={{ color: theme.palette.greenAccent.main }} />
         </IconButton>
       ),
     },
-    { field: "receiptNumber", headerName: "Receipt #", width: 150 },
-    { field: "amount", headerName: "Amount (KES)", width: 120 },
+    { field: "paymentNumber", headerName: "Payment #", width: 150, valueGetter: () => "N/A" }, // Adjust based on actual payment data
+    { field: "amount", headerName: "Amount (KES)", width: 120, valueGetter: () => "N/A" },
     {
       field: "modeOfPayment",
       headerName: "Payment Mode",
       width: 150,
-      valueGetter: (params) => params.row.payment?.modeOfPayment || "N/A",
+      valueGetter: () => "N/A",
     },
-    { field: "paidBy", headerName: "Paid By", width: 150 },
+    { field: "paidBy", headerName: "Paid By", width: 150, valueGetter: () => "N/A" },
     {
       field: "createdAt",
       headerName: "Date",
       width: 180,
-      renderCell: (params) =>
-        new Date(params.value).toLocaleString(undefined, {
-          year: "numeric",
-          month: "short",
-          day: "2-digit",
-          hour: "2-digit",
-          minute: "2-digit",
-        }),
+      renderCell: () =>
+        "N/A", // Adjust when payment data is available
     },
     {
       field: "transactionCode",
       headerName: "Transaction Code",
       width: 150,
-      valueGetter: (params) => params.row.transactionCode || "N/A",
+      valueGetter: () => "N/A",
     },
   ];
 
@@ -426,19 +429,21 @@ const CustomerDetails = () => {
         Customer Details
       </Typography>
 
-      {loading ? (
+      {loading && (
         <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", height: "80vh" }}>
           <CircularProgress color="primary" size={50} />
         </Box>
-      ) : error ? (
+      )}
+      {error && (
         <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError(null)}>
           {error}
         </Alert>
-      ) : success ? (
+      )}
+      {success && (
         <Alert severity="success" sx={{ mb: 2 }} onClose={() => setSuccess(null)}>
           {success}
         </Alert>
-      ) : null}
+      )}
 
       {customer && (
         <>
@@ -447,7 +452,7 @@ const CustomerDetails = () => {
               <IconButton onClick={handleBack} sx={{ color: theme.palette.greenAccent.main, mr: 2 }}>
                 <ArrowBackIcon sx={{ fontSize: 30 }} />
               </IconButton>
-              <Typography variant="h5">{customer.fullName}</Typography>
+              <Typography variant="h5">{customer.fullName || "N/A"}</Typography>
             </Stack>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
@@ -455,7 +460,7 @@ const CustomerDetails = () => {
                   <strong>Email:</strong> {customer.email || "N/A"}
                 </Typography>
                 <Typography>
-                  <strong>Phone:</strong> {customer.phoneNumber}
+                  <strong>Phone:</strong> {customer.phoneNumber || "N/A"}
                 </Typography>
                 <Typography>
                   <strong>Secondary Phone:</strong> {customer.secondaryPhoneNumber || "N/A"}
@@ -468,7 +473,7 @@ const CustomerDetails = () => {
                 <Typography variant="subtitle1" gutterBottom>
                   <strong>Units:</strong>
                 </Typography>
-                {customer.units.length > 0 ? (
+                {customer.units?.length > 0 ? (
                   <List dense>
                     {customer.units.map((unit) => (
                       <ListItem key={unit.id}>
@@ -476,13 +481,13 @@ const CustomerDetails = () => {
                           primary={`Unit ${unit.unitNumber}`}
                           secondary={
                             <>
-                              Building: {unit.building.name || "N/A"}
+                              Building: {unit.building?.name || "N/A"}
                               <br />
                               Rent: {unit.monthlyCharge} KES
                               <br />
                               Status: {unit.status}
                               <br />
-                              Landlord: {unit.building.landlord ? `${unit.building.landlord.firstName} ${unit.building.landlord.lastName}` : "N/A"}
+                              Landlord: {unit.building?.landlord ? `${unit.building.landlord.firstName} ${unit.building.landlord.lastName}` : "N/A"}
                             </>
                           }
                         />
@@ -496,10 +501,10 @@ const CustomerDetails = () => {
                   <strong>Lease:</strong> {customer.leaseFileUrl ? `Active (Started: ${new Date(customer.leaseStartDate).toLocaleDateString()})` : "No Lease"}
                 </Typography>
                 <Typography>
-                  <strong>Closing Balance:</strong> {customer.closingBalance} KES
+                  <strong>Closing Balance:</strong> {customer.closingBalance || 0} KES
                 </Typography>
                 <Typography>
-                  <strong>Status:</strong> {customer.status}
+                  <strong>Status:</strong> {customer.status || "N/A"}
                   {customer.status === "PENDING" && (
                     <IconButton
                       onClick={() => setOpenStatusModal(true)}
@@ -517,7 +522,7 @@ const CustomerDetails = () => {
                 variant="contained"
                 sx={{ backgroundColor: theme.palette.greenAccent.main }}
                 onClick={() => setOpenModal(true)}
-                disabled={sending}
+                disabled={sending || !customer.phoneNumber}
               >
                 {sending ? "Sending..." : `SMS ${customer.firstName}`}
               </Button>
@@ -557,12 +562,11 @@ const CustomerDetails = () => {
             </Stack>
           </Box>
 
-          {/* Delete Confirmation Dialog */}
           <Dialog open={openDeleteDialog} onClose={() => setOpenDeleteDialog(false)}>
             <DialogTitle>Confirm Delete</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to delete {customer.fullName}? This action cannot be undone.
+                Are you sure you want to delete {customer.fullName || "this customer"}? This action cannot be undone.
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -580,7 +584,6 @@ const CustomerDetails = () => {
             </DialogActions>
           </Dialog>
 
-          {/* SMS Modal */}
           <Modal open={openModal} onClose={() => setOpenModal(false)}>
             <Box
               sx={{
@@ -624,7 +627,6 @@ const CustomerDetails = () => {
             </Box>
           </Modal>
 
-          {/* Lease Management Modal */}
           <Modal open={openLeaseModal} onClose={() => setOpenLeaseModal(false)}>
             <Box
               sx={{
@@ -680,7 +682,7 @@ const CustomerDetails = () => {
                       variant="outlined"
                       onClick={() => setOpenLeaseModal(false)}
                       disabled={sending}
-                      color={theme.palette.secondary.contrastText}
+                      sx={{ color: theme.palette.secondary.contrastText }}
                     >
                       Cancel
                     </Button>
@@ -712,7 +714,7 @@ const CustomerDetails = () => {
                       variant="outlined"
                       onClick={() => setOpenLeaseModal(false)}
                       disabled={sending}
-                      color={theme.palette.secondary.contrastText}
+                      sx={{ color: theme.palette.secondary.contrastText }}
                     >
                       Cancel
                     </Button>
@@ -722,12 +724,11 @@ const CustomerDetails = () => {
             </Box>
           </Modal>
 
-          {/* Terminate Lease Confirmation Dialog */}
           <Dialog open={openTerminateDialog} onClose={() => setOpenTerminateDialog(false)}>
             <DialogTitle>Confirm Lease Termination</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to terminate the lease for {customer.fullName}?
+                Are you sure you want to terminate the lease for {customer.fullName || "this customer"}?
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -744,12 +745,11 @@ const CustomerDetails = () => {
             </DialogActions>
           </Dialog>
 
-          {/* Status Update Confirmation Dialog */}
           <Dialog open={openStatusModal} onClose={() => setOpenStatusModal(false)}>
             <DialogTitle>Confirm Customer Activation</DialogTitle>
             <DialogContent>
               <DialogContentText>
-                Are you sure you want to activate customer {customer.fullName}? Make sure invoices for rent and deposits are paid.
+                Are you sure you want to activate customer {customer.fullName || "this customer"}? Make sure invoices for rent and deposits are paid.
               </DialogContentText>
             </DialogContent>
             <DialogActions>
@@ -767,66 +767,82 @@ const CustomerDetails = () => {
             </DialogActions>
           </Dialog>
 
-          {/* Tabs */}
           <Tabs
             value={tabIndex}
             onChange={handleTabChange}
             sx={{ mt: 2, "& .MuiTab-root": { color: theme.palette.greenAccent.main } }}
           >
             <Tab label="Invoices" />
-            <Tab label="Receipts" />
+            <Tab label="Payments" />
             <Tab label="Gas Consumption" />
             <Tab label="Water Consumption" />
           </Tabs>
 
-          {/* Invoices Tab */}
           <Box hidden={tabIndex !== 0} sx={{ mt: 2, ml: 2 }}>
             <Typography variant="h6" mb={2}>
               Invoices
             </Typography>
-            <DataGrid
-              rows={customer.invoices || []}
-              columns={invoiceColumns}
-              pageSizeOptions={[5]}
-              getRowId={(row) => row.id}
-              autoHeight
-            />
+            {customer.invoices?.length === 0 ? (
+              <Typography sx={{ color: theme.palette.grey[100], textAlign: "center", mt: 2 }}>
+                No invoices found.
+              </Typography>
+            ) : (
+              <DataGrid
+                rows={customer.invoices.map((invoice) => ({
+                  ...invoice,
+                  items: invoice.InvoiceItem || [], // Map InvoiceItem to items for DataGrid
+                })) || []}
+                columns={invoiceColumns}
+                pageSizeOptions={[5]}
+                getRowId={(row) => row.id}
+                autoHeight
+              />
+            )}
           </Box>
 
-          {/* Receipts Tab */}
           <Box hidden={tabIndex !== 1} sx={{ mt: 2, ml: 2 }}>
             <Typography variant="h6" mb={2}>
-              Receipts
+              Payments
             </Typography>
-            <DataGrid
-              rows={customer.receipts || []}
-              columns={receiptColumns}
-              pageSizeOptions={[5]}
-              getRowId={(row) => row.id}
-              autoHeight
-            />
+            {customer.payments?.length === 0 ? (
+              <Typography sx={{ color: theme.palette.grey[100], textAlign: "center", mt: 2 }}>
+                No payment records found.
+              </Typography>
+            ) : (
+              <DataGrid
+                rows={customer.payments || []}
+                columns={paymentColumns}
+                pageSizeOptions={[5]}
+                getRowId={(row) => row.id}
+                autoHeight
+              />
+            )}
           </Box>
 
-          {/* Gas Consumption Tab */}
           <Box hidden={tabIndex !== 2} sx={{ mt: 2, ml: 2 }}>
             <Typography variant="h6" mb={2}>
               Gas Consumption
             </Typography>
-            <DataGrid
-              rows={customer.gasConsumptions || []}
-              columns={gasConsumptionColumns}
-              pageSizeOptions={[5]}
-              getRowId={(row) => row.id}
-              autoHeight
-            />
+            {customer.gasConsumptions?.length === 0 ? (
+              <Typography sx={{ color: theme.palette.grey[100], textAlign: "center", mt: 2 }}>
+                No gas consumption records found.
+              </Typography>
+            ) : (
+              <DataGrid
+                rows={customer.gasConsumptions || []}
+                columns={gasConsumptionColumns}
+                pageSizeOptions={[5]}
+                getRowId={(row) => row.id}
+                autoHeight
+              />
+            )}
           </Box>
 
-          {/* Water Consumption Tab */}
           <Box hidden={tabIndex !== 3} sx={{ mt: 2, ml: 2 }}>
             <Typography variant="h6" mb={2}>
               Water Consumption
             </Typography>
-            {customer.waterConsumptions.length === 0 ? (
+            {customer.waterConsumptions?.length === 0 ? (
               <Typography sx={{ color: theme.palette.grey[100], textAlign: "center", mt: 2 }}>
                 No water readings found.
               </Typography>
