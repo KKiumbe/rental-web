@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Component } from 'react';
+import { useEffect, useState, Component } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -44,7 +44,7 @@ const CreateReadingScreen = () => {
   const theme = getTheme();
   const BASE_URL = import.meta.env.VITE_BASE_URL || 'http://localhost:5000/api';
 
-  const [readingType, setReadingType] = useState('water'); // Default to water
+  const [readingType, setReadingType] = useState('water');
   const [form, setForm] = useState({
     customerId: '',
     reading: '',
@@ -65,28 +65,38 @@ const CreateReadingScreen = () => {
     }
   }, [currentUser, navigate]);
 
-  // Fetch buildings
-  const fetchBuildings = async () => {
-    try {
-      setLoading(true);
-      const response = await axios.get(`${BASE_URL}/buildings`, {
-        params: { page: 1, limit: 100 }, // Fetch all buildings
-        withCredentials: true,
-      });
-      const { buildings } = response.data;
-      console.log('Buildings response:', buildings); // Debug log
-      setBuildings(buildings || []);
-    } catch (err) {
-      console.error('Error fetching buildings:', err);
-      if (err.response?.status === 401) {
-        navigate('/login');
-      } else {
-        setSnackbarMessage('Failed to fetch buildings');
-        setSnackbarOpen(true);
+  // Fetch buildings with retry
+  const fetchBuildings = async (retries = 2, delay = 1000) => {
+    setLoading(true);
+    const attemptFetch = async (attempt) => {
+      try {
+        const response = await axios.get(`${BASE_URL}/buildings`, {
+          params: { page: 1, limit: 100 },
+          withCredentials: true,
+          timeout: 5000,
+        });
+        const { buildings } = response.data;
+        console.log('Buildings API response:', JSON.stringify(buildings, null, 2));
+        setBuildings(buildings || []);
+        setLoading(false);
+        return true;
+      } catch (err) {
+        console.error(`Buildings fetch attempt ${attempt}:`, err);
+        if (attempt < retries && err.response?.status !== 401) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return attemptFetch(attempt + 1);
+        }
+        if (err.response?.status === 401) {
+          navigate('/login');
+        } else {
+          setSnackbarMessage('Failed to fetch buildings. Please try again.');
+          setSnackbarOpen(true);
+        }
+        setLoading(false);
+        return false;
       }
-    } finally {
-      setLoading(false);
-    }
+    };
+    await attemptFetch(1);
   };
 
   useEffect(() => {
@@ -100,23 +110,37 @@ const CreateReadingScreen = () => {
     if (selectedBuildingId) {
       const building = buildings.find((b) => b.id === selectedBuildingId);
       const allUnits = building?.units || [];
-      console.log('Units for selected building:', allUnits); // Debug log
+      console.log('Units for selected building:', JSON.stringify(allUnits, null, 2));
       setUnits(allUnits);
-      setSelectedUnitId(''); // Reset unit selection
-      setForm((prev) => ({ ...prev, customerId: '' })); // Reset customerId
+      setSelectedUnitId('');
+      setForm((prev) => ({ ...prev, customerId: '' }));
+      setErrors((prev) => ({ ...prev, customerId: '' }));
     } else {
       setUnits([]);
       setSelectedUnitId('');
       setForm((prev) => ({ ...prev, customerId: '' }));
+      setErrors((prev) => ({ ...prev, customerId: '' }));
     }
   }, [selectedBuildingId, buildings]);
 
   // Update customerId when unit is selected
   useEffect(() => {
-    if (selectedUnitId) {
+    if (selectedUnitId && units.length > 0) {
       const unit = units.find((u) => u.id === selectedUnitId);
-      const customer = unit?.customers[0]; // Assume one customer per unit
-      if (customer && (unit?.status === 'OCCUPIED' || unit?.status === 'OCCUPIED_PENDING_PAYMENT')) {
+      console.log('Selected unit:', JSON.stringify(unit, null, 2));
+      if (!unit) {
+        setForm((prev) => ({ ...prev, customerId: '' }));
+        setErrors((prev) => ({ ...prev, customerId: 'Selected unit not found' }));
+        return;
+      }
+      // Prioritize unit.customer, fallback to customers or CustomerUnit
+      const customer = unit.customer || unit.customers?.[0] || unit.CustomerUnit?.[0]?.customer;
+      console.log('Selected customer:', JSON.stringify(customer, null, 2));
+      if (
+        customer &&
+        customer.status?.toUpperCase() === 'ACTIVE' &&
+        (unit.status === 'OCCUPIED' || unit.status === 'OCCUPIED_PENDING_PAYMENT')
+      ) {
         setForm((prev) => ({ ...prev, customerId: customer.id }));
         setErrors((prev) => ({ ...prev, customerId: '' }));
       } else {
@@ -124,15 +148,18 @@ const CreateReadingScreen = () => {
         setErrors((prev) => ({
           ...prev,
           customerId:
-            unit?.status === 'VACANT'
+            unit.status === 'VACANT'
               ? 'Selected unit is vacant'
-              : unit?.status === 'MAINTENANCE'
+              : unit.status === 'MAINTENANCE'
               ? 'Selected unit is under maintenance'
-              : 'Selected unit has no active customer',
+              : !customer
+              ? 'Selected unit has no customer'
+              : 'Customer is not active',
         }));
       }
     } else {
       setForm((prev) => ({ ...prev, customerId: '' }));
+      setErrors((prev) => ({ ...prev, customerId: '' }));
     }
   }, [selectedUnitId, units]);
 
@@ -163,9 +190,9 @@ const CreateReadingScreen = () => {
       const response = await axios.post(
         `${BASE_URL}${endpoint}`,
         { ...form, reading: parseFloat(form.reading) },
-        { withCredentials: true }
+        { withCredentials: true, timeout: 5000 }
       );
-      setSnackbarMessage(response.data.message || 'Reading created successfully');
+      setSnackbarMessage(response.data.message || `Reading created successfully`);
       setSnackbarOpen(true);
       setTimeout(() => {
         navigate('/record-utility');
@@ -208,7 +235,6 @@ const CreateReadingScreen = () => {
               </Box>
             ) : (
               <form onSubmit={handleSubmit}>
-                {/* Reading Type Dropdown */}
                 <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 2 }}>
                   <InputLabel>Reading Type</InputLabel>
                   <Select
@@ -221,7 +247,6 @@ const CreateReadingScreen = () => {
                   </Select>
                 </FormControl>
 
-                {/* Building Dropdown */}
                 <FormControl
                   fullWidth
                   variant="outlined"
@@ -247,7 +272,6 @@ const CreateReadingScreen = () => {
                   </Select>
                 </FormControl>
 
-                {/* Unit Dropdown */}
                 <FormControl
                   fullWidth
                   variant="outlined"
@@ -265,31 +289,34 @@ const CreateReadingScreen = () => {
                     <MenuItem value="">
                       <em>{units.length === 0 ? 'No units available' : 'Select a unit'}</em>
                     </MenuItem>
-                    {units.map((unit) => (
-                      <MenuItem
-                        key={unit.id}
-                        value={unit.id}
-                        sx={{
-                          color:
-                            unit.status === 'VACANT' || unit.status === 'MAINTENANCE'
-                              ? 'grey.500'
-                              : 'inherit',
-                          backgroundColor:
-                            unit.status === 'VACANT' || unit.status === 'MAINTENANCE'
-                              ? 'grey.100'
-                              : 'inherit',
-                        }}
-                      >
-                        {unit.unitNumber}{' '}
-                        {unit.status === 'OCCUPIED' || unit.status === 'OCCUPIED_PENDING_PAYMENT'
-                          ? unit.customers[0]
-                            ? `(${unit.customers[0].firstName} ${unit.customers[0].lastName})`
-                            : '(No Customer)'
-                          : unit.status === 'VACANT'
-                          ? '(Vacant)'
-                          : '(Maintenance)'}
-                      </MenuItem>
-                    ))}
+                    {units.map((unit) => {
+                      const customer = unit.customer || unit.customers?.[0] || unit.CustomerUnit?.[0]?.customer;
+                      return (
+                        <MenuItem
+                          key={unit.id}
+                          value={unit.id}
+                          sx={{
+                            color:
+                              unit.status === 'VACANT' || unit.status === 'MAINTENANCE'
+                                ? 'grey.500'
+                                : 'inherit',
+                            backgroundColor:
+                              unit.status === 'VACANT' || unit.status === 'MAINTENANCE'
+                                ? 'grey.100'
+                                : 'inherit',
+                          }}
+                        >
+                          {unit.unitNumber}{' '}
+                          {unit.status === 'OCCUPIED' || unit.status === 'OCCUPIED_PENDING_PAYMENT'
+                            ? customer
+                              ? `(${customer.firstName} ${customer.lastName})`
+                              : '(No Customer)'
+                            : unit.status === 'VACANT'
+                            ? '(Vacant)'
+                            : '(Maintenance)'}
+                        </MenuItem>
+                      );
+                    })}
                   </Select>
                   {errors.customerId && (
                     <Typography color="error" variant="caption">
@@ -298,7 +325,6 @@ const CreateReadingScreen = () => {
                   )}
                 </FormControl>
 
-                {/* Reading Input */}
                 <TextField
                   fullWidth
                   label="Reading"

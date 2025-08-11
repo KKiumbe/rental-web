@@ -275,7 +275,7 @@ const AddUnitScreen = () => {
                 />
                 <TextField
                   fullWidth
-                  label="Monthly Charge ($)"
+                  label="Monthly Charge (Ksh)"
                   name="monthlyCharge"
                   type="number"
                   value={unitForm.monthlyCharge}
@@ -285,11 +285,11 @@ const AddUnitScreen = () => {
                   variant="outlined"
                   size="small"
                   margin="normal"
-                  inputProps={{ step: '0.01' }}
+                  inputProps={{ step: '1' }}
                 />
                 <TextField
                   fullWidth
-                  label="Deposit Amount ($)"
+                  label="Deposit Amount (ksh)"
                   name="depositAmount"
                   type="number"
                   value={unitForm.depositAmount}
@@ -299,11 +299,11 @@ const AddUnitScreen = () => {
                   variant="outlined"
                   size="small"
                   margin="normal"
-                  inputProps={{ step: '0.01' }}
+                  inputProps={{ step: '1' }}
                 />
                 <TextField
                   fullWidth
-                  label="Garbage Charge ($)"
+                  label="Garbage Charge (ksh)"
                   name="garbageCharge"
                   type="number"
                   value={unitForm.garbageCharge}
@@ -313,11 +313,11 @@ const AddUnitScreen = () => {
                   variant="outlined"
                   size="small"
                   margin="normal"
-                  inputProps={{ step: '0.01' }}
+                  inputProps={{ step: '1' }}
                 />
                 <TextField
                   fullWidth
-                  label="Service Charge ($)"
+                  label="Service Charge (ksh)"
                   name="serviceCharge"
                   type="number"
                   value={unitForm.serviceCharge}
@@ -327,7 +327,7 @@ const AddUnitScreen = () => {
                   variant="outlined"
                   size="small"
                   margin="normal"
-                  inputProps={{ step: '0.01' }}
+                  inputProps={{ step: '1' }}
                 />
                 <FormControl fullWidth variant="outlined" size="small" sx={{ mb: 2 }}>
                   <InputLabel>Status</InputLabel>

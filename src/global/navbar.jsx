@@ -16,7 +16,7 @@ import {
   Alert,
   Badge,
 } from "@mui/material";
-import {  AccountCircle, Menu as MenuIcon, Edit, Notifications } from "@mui/icons-material";
+import { AccountCircle, Menu as MenuIcon, Edit, Notifications } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore, useThemeStore } from "../store/authStore";
 import axios from "axios";
@@ -37,8 +37,10 @@ export default function Navbar() {
   const navigate = useNavigate();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
-  const [notificationOpen, setNotificationOpen] = useState(false); // Separate state for notification drawer
+  const [notificationOpen, setNotificationOpen] = useState(false);
   const [sms, setSMS] = useState(null);
+  const [smsLoading, setSmsLoading] = useState(false); // New loading state
+  const [smsError, setSmsError] = useState(false); // Track if SMS fetch failed
   const [editMode, setEditMode] = useState(false);
   const [userDetails, setUserDetails] = useState({
     firstName: "",
@@ -50,37 +52,62 @@ export default function Navbar() {
     confirmPassword: "",
   });
   const [snackbar, setSnackbar] = useState({ open: false, message: "", severity: "success" });
-  const [notifications, setNotifications] = useState([]); // Placeholder for notifications
-  const [unreadCount, setUnreadCount] = useState(0); // Placeholder for unread count
+  const [notifications, setNotifications] = useState([]);
+  const [unreadCount, setUnreadCount] = useState(0);
 
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const BASEURL = import.meta.env.VITE_BASE_URL;
   const theme = getTheme(darkMode ? "dark" : "light");
 
   // Mock notifications (replace with API call when ready)
   useEffect(() => {
-    // Simulate fetching notifications
-    const mockNotifications = [
-      // { id: 1, message: "New water reading submitted", read: false, createdAt: "2025-07-01T15:59:00.000Z" },
-      // { id: 2, message: "Invoice due tomorrow", read: false, createdAt: "2025-07-01T10:00:00.000Z" },
-    ];
+    const mockNotifications = [];
     setNotifications(mockNotifications);
     setUnreadCount(mockNotifications.filter((n) => !n.read).length);
   }, []);
 
-  // Fetch SMS balance
-  const fetchSMSBalance = async () => {
-    try {
-      const response = await axios.get(`${BASEURL}/get-sms-balance`, { withCredentials: true });
-      setSMS(response.data.credit);
-    } catch (error) {
-      console.error("Error fetching SMS balance:", error);
-      setSMS("N/A");
-    }
+  // Fetch SMS balance with retry mechanism
+  const fetchSMSBalance = async (retries = 2, delay = 1000) => {
+    setSmsLoading(true);
+    setSmsError(false);
+
+    const attemptFetch = async (attempt) => {
+      try {
+        const response = await axios.get(`${BASEURL}/get-sms-balance`, { withCredentials: true });
+        setSMS(response.data.credit);
+        setSmsLoading(false);
+        return true;
+      } catch (error) {
+        console.error(`SMS balance fetch attempt ${attempt}:`, error);
+        if (attempt < retries && error.response?.status !== 401) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+          return attemptFetch(attempt + 1);
+        }
+        const errorMessage =
+          error.response?.status === 401
+            ? "Session expired. Please log in again."
+            : error.response?.status === 500
+            ? "Server error. SMS balance unavailable."
+            : error.response?.data?.message || "Failed to fetch SMS balance.";
+        setSnackbar({ open: true, message: errorMessage, severity: "error" });
+        setSMS(null); // Set to null to hide the SMS balance section
+        setSmsLoading(false);
+        setSmsError(true);
+        if (error.response?.status === 401) {
+          logout();
+          navigate("/login");
+        }
+        return false;
+      }
+    };
+
+    await attemptFetch(1);
   };
 
   useEffect(() => {
-    fetchSMSBalance();
-  }, []);
+    if (currentUser) {
+      fetchSMSBalance();
+    }
+  }, [currentUser]);
 
   const handleLogout = () => {
     logout();
@@ -130,7 +157,6 @@ export default function Navbar() {
   const handleUpdateUser = async () => {
     const { firstName, email, phoneNumber, currentPassword, password, confirmPassword } = userDetails;
 
-    // Validation
     if (!firstName || !email) {
       setSnackbar({ open: true, message: "First name and email are required", severity: "error" });
       return;
@@ -152,7 +178,6 @@ export default function Navbar() {
       return;
     }
 
-    // Prepare payload
     const payload = {};
     if (firstName) payload.firstName = firstName;
     if (userDetails.lastName) payload.lastName = userDetails.lastName;
@@ -180,7 +205,6 @@ export default function Navbar() {
     }
   };
 
-  // Notification drawer
   const notificationDrawer = (
     <Box sx={{ width: 300, bgcolor: darkMode ? "#333" : "#fff", color: darkMode ? "#fff" : "#000", p: 2 }}>
       <Typography variant="h6" gutterBottom>
@@ -395,11 +419,18 @@ export default function Navbar() {
           </Box>
 
           <Box sx={{ display: "flex", alignItems: "center", gap: 2 }}>
-            <Typography sx={{ color: theme.palette.grey[100] }}>
-              SMS Balance: KSH.{sms !== null ? sms : "Loading..."}
-            </Typography>
+            {/* Conditionally render SMS balance only if successfully fetched */}
+            {sms !== null && !smsError && (
+              <Typography sx={{ color: theme.palette.grey[100] }}>
+                SMS Balance: KSH.{smsLoading ? "Loading..." : sms}
+              </Typography>
+            )}
 
-            <IconButton color="inherit" onClick={toggleTheme} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}>
+            <IconButton
+              color="inherit"
+              onClick={toggleTheme}
+              aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
               {darkMode ? "🌙" : "☀️"}
             </IconButton>
 
@@ -448,8 +479,8 @@ export default function Navbar() {
         onClose={handleDrawerToggle}
         sx={{ display: { xs: "block", md: "none" }, "& .MuiDrawer-paper": { width: "250px" } }}
         ModalProps={{
-          keepMounted: true, // Improve performance on mobile
-          'aria-hidden': false, // Prevent aria-hidden on root
+          keepMounted: true,
+          'aria-hidden': false,
         }}
         aria-label="Mobile menu drawer"
       >
@@ -465,7 +496,7 @@ export default function Navbar() {
         }}
         ModalProps={{
           keepMounted: true,
-          'aria-hidden': false, // Prevent aria-hidden on root
+          'aria-hidden': false,
         }}
         aria-label="Notifications drawer"
       >
@@ -481,7 +512,7 @@ export default function Navbar() {
         }}
         ModalProps={{
           keepMounted: true,
-          'aria-hidden': false, // Prevent aria-hidden on root
+          'aria-hidden': false,
         }}
         aria-label="Profile drawer"
       >
