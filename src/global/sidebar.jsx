@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import  { useState } from "react";
 import {
   Drawer,
   List,
@@ -26,13 +26,13 @@ import {
   ReceiptLong,
   Business,
   Water,
-  
+  FlashOn, // Icon for Electricity
+  LocalGasStation, // Icon for Gas
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import MenuIcon from "@mui/icons-material/Menu";
 import BusinessIcon from "@mui/icons-material/Business";
-
-import HomeWorkIcon from '@mui/icons-material/HomeWork';
+import HomeWorkIcon from "@mui/icons-material/HomeWork";
 
 const Sidebar = () => {
   const navigate = useNavigate();
@@ -45,7 +45,8 @@ const Sidebar = () => {
     settings: false,
     reports: false,
     tasks: false,
-    properties: false, // Added for Properties menu
+    properties: false,
+    utilities: false, // Added for Utility menu
   });
 
   // Toggle sidebar
@@ -82,7 +83,7 @@ const Sidebar = () => {
           {open && <ListItemText primary="Dashboard" sx={{ fontSize: "0.9rem" }} />}
         </ListItem>
 
-        {/* Customers Menu */}
+        {/* Tenants Menu */}
         <ListItem button onClick={() => toggleSubmenu("tenants")} sx={{ py: 1 }}>
           <ListItemIcon sx={{ minWidth: 40 }}>
             <Person sx={{ fontSize: 24 }} />
@@ -108,7 +109,38 @@ const Sidebar = () => {
               <ListItemIcon sx={{ minWidth: 30 }}>
                 <Water sx={{ fontSize: 20 }} />
               </ListItemIcon>
-              {open && <ListItemText primary="Water utility" sx={{ fontSize: "0.8rem" }} />}
+              {open && <ListItemText primary="Water Readings" sx={{ fontSize: "0.8rem" }} />}
+            </ListItem>
+          </List>
+        </Collapse>
+
+        {/* Utility Menu */}
+        <ListItem button onClick={() => toggleSubmenu("utilities")} sx={{ py: 1 }}>
+          <ListItemIcon sx={{ minWidth: 40 }}>
+            <Settings sx={{ fontSize: 24 }} />
+          </ListItemIcon>
+          {open && <ListItemText primary="utilities" sx={{ fontSize: "0.9rem" }} />}
+          {open && (submenuOpen.utilities ? <ExpandLess /> : <ExpandMore />)}
+        </ListItem>
+        <Collapse in={submenuOpen.utilities} timeout="auto" unmountOnExit>
+          <List component="div" disablePadding>
+            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/water-readings")}>
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <Water sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              {open && <ListItemText primary="Water" sx={{ fontSize: "0.8rem" }} />}
+            </ListItem>
+            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/utility/gas")}>
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <LocalGasStation sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              {open && <ListItemText primary="Gas" sx={{ fontSize: "0.8rem" }} />}
+            </ListItem>
+            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/utility/electricity")}>
+              <ListItemIcon sx={{ minWidth: 30 }}>
+                <FlashOn sx={{ fontSize: 20 }} />
+              </ListItemIcon>
+              {open && <ListItemText primary="Electricity" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
           </List>
         </Collapse>
@@ -129,21 +161,12 @@ const Sidebar = () => {
               </ListItemIcon>
               {open && <ListItemText primary="Properties" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
-
             <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/landlords")}>
-            <ListItemIcon sx={{ minWidth: 30 }}>
-               <HomeWorkIcon sx={{ fontSize: 20 }} />
-           </ListItemIcon>
-              {open && <ListItemText primary="Landlords" sx={{ fontSize: "0.8rem" }} />}
-           </ListItem>
-            {/* <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/add-property")}>
               <ListItemIcon sx={{ minWidth: 30 }}>
-                <Add sx={{ fontSize: 20 }} />
+                <HomeWorkIcon sx={{ fontSize: 20 }} />
               </ListItemIcon>
-              {open && <ListItemText primary="Add Property/Unit" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem> */}
-
-          
+              {open && <ListItemText primary="Landlords" sx={{ fontSize: "0.8rem" }} />}
+            </ListItem>
           </List>
         </Collapse>
 
@@ -239,8 +262,6 @@ const Sidebar = () => {
             </ListItem>
           </List>
         </Collapse>
-
-     
 
         {/* Reports */}
         <ListItem button onClick={() => toggleSubmenu("reports")} sx={{ py: 1 }}>

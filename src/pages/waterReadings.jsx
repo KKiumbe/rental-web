@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback, Component } from "react";
+import React, { useEffect, useState, useMemo, useCallback, Component } from "react";
 import {
   Paper,
   Typography,
@@ -82,176 +82,159 @@ export default function WaterReadingsList() {
   const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:5000/api";
   const theme = getTheme();
 
-  // Fetch all normal water readings
-  const fetchAllWaterReadings = useCallback(async (page, pageSize) => {
-    setLoading(true);
-    setErrorMessage("");
-    try {
-      const res = await axios.get(`${BASEURL}/water-readings`, {
-        params: { page: page + 1, limit: pageSize },
-        withCredentials: true,
-      });
-      const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
-      setNormalReadings(fetchedReadings);
-      setNormalRowCount(totalCount);
-      if (fetchedReadings.length === 0) {
-        setErrorMessage("No normal water readings found.");
+  // Fetch all water readings (normal and abnormal)
+  const fetchAllWaterReadings = useCallback(
+    async (page, pageSize) => {
+      setLoading(true);
+      setErrorMessage("");
+      try {
+        const res = await axios.get(`${BASEURL}/water-readings`, {
+          params: { page: page + 1, limit: pageSize },
+          withCredentials: true,
+        });
+        const { normal = {}, abnormal = {} } = res.data || {};
+        setNormalReadings(normal.data || []);
+        setNormalRowCount(normal.totalCount || 0);
+        setAbnormalReadings(abnormal.data || []);
+        setAbnormalRowCount(abnormal.totalCount || 0);
+        if (normal.data?.length === 0 && abnormal.data?.length === 0) {
+          setErrorMessage("No water readings found.");
+        }
+      } catch (error) {
+        if (error.response?.status === 401) {
+          setErrorMessage("Session expired. Please log in again.");
+          navigate("/login");
+        } else {
+          setErrorMessage(error.response?.data?.message || "Failed to fetch water readings.");
+        }
+        setNormalReadings([]);
+        setNormalRowCount(0);
+        setAbnormalReadings([]);
+        setAbnormalRowCount(0);
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      if (error.response?.status === 401) {
-        setErrorMessage("Session expired. Please log in again.");
-        navigate("/login");
-      } else {
-        setErrorMessage(error.response?.data?.message || "Failed to fetch water readings.");
-      }
-      setNormalReadings([]);
-      setNormalRowCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, BASEURL]);
-
-  // Fetch all abnormal water readings
-  const fetchAllAbnormalWaterReadings = useCallback(async (page, pageSize) => {
-    setLoading(true);
-    setErrorMessage("");
-    try {
-      const res = await axios.get(`${BASEURL}/abnormal-water-readings`, {
-        params: { page: page + 1, limit: pageSize },
-        withCredentials: true,
-      });
-      const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
-      setAbnormalReadings(fetchedReadings);
-      setAbnormalRowCount(totalCount);
-      if (fetchedReadings.length === 0) {
-        setErrorMessage("No abnormal water readings found.");
-      }
-    } catch (error) {
-      if (error.response?.status === 401) {
-        setErrorMessage("Session expired. Please log in again.");
-        navigate("/login");
-      } else {
-        setErrorMessage(error.response?.data?.message || "Failed to fetch abnormal water readings.");
-      }
-      setAbnormalReadings([]);
-      setAbnormalRowCount(0);
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, BASEURL]);
-
-  // Fetch buildings for create form
-  const fetchBuildings = useCallback(async () => {
-    try {
-      setFormLoading(true);
-      const response = await axios.get(`${BASEURL}/buildings`, {
-        params: { page: 1, limit: 100 },
-        withCredentials: true,
-      });
-      setBuildings(response.data.buildings || []);
-    } catch (err) {
-      if (err.response?.status === 401) {
-        navigate("/login");
-      } else {
-        setSnackbarMessage("Failed to fetch buildings");
-        setSnackbarOpen(true);
-      }
-    } finally {
-      setFormLoading(false);
-    }
-  }, [navigate, BASEURL]);
+    },
+    [navigate, BASEURL]
+  );
 
   // Fetch water readings by customer phone number
-  const fetchReadingsByPhone = useCallback(async (page, pageSize, phone, isAbnormal = false) => {
-    setLoading(true);
-    setErrorMessage("");
-    try {
-      const endpoint = isAbnormal
-        ? `${BASEURL}/abnormal-water-readings/search-by-phone`
-        : `${BASEURL}/water-readings/search-by-phone`;
-      const res = await axios.get(endpoint, {
-        params: { phone, page: page + 1, limit: pageSize },
-        withCredentials: true,
-      });
-      const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
-      if (isAbnormal) {
-        setAbnormalReadings(fetchedReadings);
-        setAbnormalRowCount(totalCount);
-      } else {
-        setNormalReadings(fetchedReadings);
-        setNormalRowCount(totalCount);
+  const fetchReadingsByPhone = useCallback(
+    async (page, pageSize, phone, isAbnormal = false) => {
+      setLoading(true);
+      setErrorMessage("");
+      try {
+        const endpoint = `${BASEURL}/water-readings/search-by-phone`;
+        const res = await axios.get(endpoint, {
+          params: { phone, page: page + 1, limit: pageSize, type: isAbnormal ? "abnormal" : "normal" },
+          withCredentials: true,
+        });
+        const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
+        if (isAbnormal) {
+          setAbnormalReadings(fetchedReadings);
+          setAbnormalRowCount(totalCount);
+        } else {
+          setNormalReadings(fetchedReadings);
+          setNormalRowCount(totalCount);
+        }
+        if (fetchedReadings.length === 0) {
+          setErrorMessage(`No ${isAbnormal ? "abnormal" : "normal"} water readings found for this phone number.`);
+        }
+      } catch (error) {
+        if (error.response?.status === 401) {
+          setErrorMessage("Session expired. Please log in again.");
+          navigate("/login");
+        } else {
+          setErrorMessage(
+            error.response?.data?.message ||
+              `Failed to search ${isAbnormal ? "abnormal" : "normal"} water readings by phone.`
+          );
+        }
+        if (isAbnormal) {
+          setAbnormalReadings([]);
+          setAbnormalRowCount(0);
+        } else {
+          setNormalReadings([]);
+          setNormalRowCount(0);
+        }
+      } finally {
+        setLoading(false);
       }
-      if (fetchedReadings.length === 0) {
-        setErrorMessage(`No ${isAbnormal ? "abnormal" : "normal"} water readings found for this phone number.`);
-      }
-    } catch (error) {
-      if (error.response?.status === 401) {
-        setErrorMessage("Session expired. Please log in again.");
-        navigate("/login");
-      } else {
-        setErrorMessage(
-          error.response?.data?.message ||
-            `Failed to search ${isAbnormal ? "abnormal" : "normal"} water readings by phone.`
-        );
-      }
-      if (isAbnormal) {
-        setAbnormalReadings([]);
-        setAbnormalRowCount(0);
-      } else {
-        setNormalReadings([]);
-        setNormalRowCount(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, BASEURL]);
+    },
+    [navigate, BASEURL]
+  );
 
   // Fetch water readings by customer name
-  const fetchReadingsByName = useCallback(async (page, pageSize, query, isAbnormal = false) => {
-    setLoading(true);
-    setErrorMessage("");
-    try {
-      const endpoint = isAbnormal
-        ? `${BASEURL}/abnormal-water-readings/search-by-name`
-        : `${BASEURL}/water-readings/search-by-name`;
-      const [firstName, ...lastNameParts] = query.trim().split(" ");
-      const lastName = lastNameParts.length > 0 ? lastNameParts.join(" ") : undefined;
-      const res = await axios.get(endpoint, {
-        params: { firstName, lastName, page: page + 1, limit: pageSize },
-        withCredentials: true,
-      });
-      const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
-      if (isAbnormal) {
-        setAbnormalReadings(fetchedReadings);
-        setAbnormalRowCount(totalCount);
-      } else {
-        setNormalReadings(fetchedReadings);
-        setNormalRowCount(totalCount);
+  const fetchReadingsByName = useCallback(
+    async (page, pageSize, query, isAbnormal = false) => {
+      setLoading(true);
+      setErrorMessage("");
+      try {
+        const endpoint = `${BASEURL}/water-readings/search-by-name`;
+        const [firstName, ...lastNameParts] = query.trim().split(" ");
+        const lastName = lastNameParts.length > 0 ? lastNameParts.join(" ") : undefined;
+        const res = await axios.get(endpoint, {
+          params: { firstName, lastName, page: page + 1, limit: pageSize, type: isAbnormal ? "abnormal" : "normal" },
+          withCredentials: true,
+        });
+        const { data: fetchedReadings = [], totalCount = 0 } = res.data || {};
+        if (isAbnormal) {
+          setAbnormalReadings(fetchedReadings);
+          setAbnormalRowCount(totalCount);
+        } else {
+          setNormalReadings(fetchedReadings);
+          setNormalRowCount(totalCount);
+        }
+        if (fetchedReadings.length === 0) {
+          setErrorMessage(`No ${isAbnormal ? "abnormal" : "normal"} water readings found for this name.`);
+        }
+      } catch (error) {
+        if (error.response?.status === 401) {
+          setErrorMessage("Session expired. Please log in again.");
+          navigate("/login");
+        } else {
+          setErrorMessage(
+            error.response?.data?.message ||
+              `Failed to search ${isAbnormal ? "abnormal" : "normal"} water readings by name.`
+          );
+        }
+        if (isAbnormal) {
+          setAbnormalReadings([]);
+          setAbnormalRowCount(0);
+        } else {
+          setNormalReadings([]);
+          setNormalRowCount(0);
+        }
+      } finally {
+        setLoading(false);
       }
-      if (fetchedReadings.length === 0) {
-        setErrorMessage(`No ${isAbnormal ? "abnormal" : "normal"} water readings found for this name.`);
+    },
+    [navigate, BASEURL]
+  );
+
+  // Fetch buildings for create form
+  const fetchBuildings = useCallback(
+    async () => {
+      try {
+        setFormLoading(true);
+        const response = await axios.get(`${BASEURL}/buildings`, {
+          params: { page: 1, limit: 100 },
+          withCredentials: true,
+        });
+        setBuildings(response.data.buildings || []);
+      } catch (err) {
+        if (err.response?.status === 401) {
+          navigate("/login");
+        } else {
+          setSnackbarMessage("Failed to fetch buildings");
+          setSnackbarOpen(true);
+        }
+      } finally {
+        setFormLoading(false);
       }
-    } catch (error) {
-      if (error.response?.status === 401) {
-        setErrorMessage("Session expired. Please log in again.");
-        navigate("/login");
-      } else {
-        setErrorMessage(
-          error.response?.data?.message ||
-            `Failed to search ${isAbnormal ? "abnormal" : "normal"} water readings by name.`
-        );
-      }
-      if (isAbnormal) {
-        setAbnormalReadings([]);
-        setAbnormalRowCount(0);
-      } else {
-        setNormalReadings([]);
-        setNormalRowCount(0);
-      }
-    } finally {
-      setLoading(false);
-    }
-  }, [navigate, BASEURL]);
+    },
+    [navigate, BASEURL]
+  );
 
   // Debounced search handler
   const debouncedSearch = useMemo(
@@ -259,9 +242,7 @@ export default function WaterReadingsList() {
       debounce((query, page, pageSize, isAbnormal) => {
         const trimmedQuery = query.trim();
         if (trimmedQuery === "") {
-          isAbnormal
-            ? fetchAllAbnormalWaterReadings(page, pageSize)
-            : fetchAllWaterReadings(page, pageSize);
+          fetchAllWaterReadings(page, pageSize);
         } else {
           const isPhoneNumber = /^\d+$/.test(trimmedQuery);
           if (isPhoneNumber) {
@@ -271,7 +252,7 @@ export default function WaterReadingsList() {
           }
         }
       }, 300),
-    [fetchAllWaterReadings, fetchAllAbnormalWaterReadings, fetchReadingsByPhone, fetchReadingsByName]
+    [fetchAllWaterReadings, fetchReadingsByPhone, fetchReadingsByName]
   );
 
   // Handle search input change
@@ -335,7 +316,7 @@ export default function WaterReadingsList() {
     try {
       const response = await axios.post(
         `${BASEURL}/water-reading`,
-        { ...form, reading: parseFloat(form.reading) },
+        { ...form, reading: parseFloat(form.reading), tenantId: currentUser.tenantId },
         { withCredentials: true }
       );
 
@@ -360,11 +341,7 @@ export default function WaterReadingsList() {
     setTabValue(newValue);
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
     setSearchQuery("");
-    if (newValue === 0) {
-      fetchAllWaterReadings(0, paginationModel.pageSize);
-    } else {
-      fetchAllAbnormalWaterReadings(0, paginationModel.pageSize);
-    }
+    fetchAllWaterReadings(0, paginationModel.pageSize);
   };
 
   // Fetch buildings when modal opens
@@ -427,15 +404,15 @@ export default function WaterReadingsList() {
   const normalRows = useMemo(() => {
     return normalReadings.map((reading) => ({
       id: reading.id,
-      customerName: `${reading.customer?.firstName || "Unknown"} ${reading.customer?.lastName || ""}`,
-      phoneNumber: reading.customer?.phoneNumber || "N/A",
-      unitId: reading.customer?.unitId || "N/A",
+      customerName: reading.customerName || `${reading.customer?.firstName || "Unknown"} ${reading.customer?.lastName || ""}`,
+      phoneNumber: reading.customer?.phoneNumber || reading.Customer?.phoneNumber || "N/A",
+      unitId: reading.customer?.unitId || reading.Customer?.unitId || "N/A",
       reading: reading.reading,
       consumption: reading.consumption,
       period: reading.period ? format(new Date(reading.period), "MMM yyyy") : "N/A",
-      readBy: reading.readBy ? `${reading.readBy.firstName} ${reading.readBy.lastName}` : "N/A",
+      readBy: reading.User ? `${reading.User.firstName} ${reading.User.lastName}` : "N/A",
       meterPhotoUrl: reading.meterPhotoUrl || "N/A",
-      abnormalReading: reading.AbnormalWaterReading?.length > 0 ? "Yes" : "No",
+      abnormalReading: reading.type === "abnormal" ? "Yes" : "No",
       createdAt: reading.createdAt,
     }));
   }, [normalReadings]);
@@ -444,13 +421,13 @@ export default function WaterReadingsList() {
   const abnormalRows = useMemo(() => {
     return abnormalReadings.map((reading) => ({
       id: reading.id,
-      customerName: `${reading.customer?.firstName || "Unknown"} ${reading.customer?.lastName || ""}`,
-      phoneNumber: reading.customer?.phoneNumber || "N/A",
-      unitId: reading.customer?.unitId || "N/A",
+      customerName: reading.customerName || `${reading.Customer?.firstName || "Unknown"} ${reading.Customer?.lastName || ""}`,
+      phoneNumber: reading.Customer?.phoneNumber || reading.customer?.phoneNumber || "N/A",
+      unitId: reading.Customer?.unitId || reading.customer?.unitId || "N/A",
       reading: reading.reading,
       consumption: reading.consumption,
       period: reading.period ? format(new Date(reading.period), "MMM yyyy") : "N/A",
-      readBy: reading.readBy ? `${reading.readBy.firstName} ${reading.readBy.lastName}` : "N/A",
+      readBy: reading.User ? `${reading.User.firstName} ${reading.User.lastName}` : "N/A",
       meterPhotoUrl: reading.meterPhotoUrl || "N/A",
       reviewed: reading.reviewed ? "Yes" : "No",
       resolved: reading.resolved ? "Yes" : "No",
@@ -670,9 +647,7 @@ export default function WaterReadingsList() {
                 variant="outlined"
                 onClick={() => {
                   setSearchQuery("");
-                  tabValue === 1
-                    ? fetchAllAbnormalWaterReadings(0, paginationModel.pageSize)
-                    : fetchAllWaterReadings(0, paginationModel.pageSize);
+                  fetchAllWaterReadings(0, paginationModel.pageSize);
                 }}
                 sx={{
                   color: theme.palette.greenAccent.main,
