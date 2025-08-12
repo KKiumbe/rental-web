@@ -105,12 +105,7 @@ const Sidebar = () => {
               </ListItemIcon>
               {open && <ListItemText primary="Create" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/water-readings")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <Water sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="Water Readings" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
+          
           </List>
         </Collapse>
 
