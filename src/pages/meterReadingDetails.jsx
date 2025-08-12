@@ -3,8 +3,6 @@ import { useParams, useNavigate } from "react-router-dom";
 import {
   Box,
   Typography,
-  Paper,
-  Divider,
   Grid,
   Card,
   CardContent,
@@ -18,18 +16,22 @@ import {
   Modal,
   TextField,
   Snackbar,
+  FormControlLabel,
+  Checkbox,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import { useAuthStore, useThemeStore } from "../store/authStore";
-import TitleComponent from "../components/title";
 import WaterDropIcon from "@mui/icons-material/WaterDrop";
 import EditIcon from "@mui/icons-material/Edit";
+import { useAuthStore } from "../store/authStore";
+import TitleComponent from "../components/title";
 import { getTheme } from "../store/theme";
 import axios from "axios";
+import { format } from "date-fns";
 
 const MeterReadingDetails = () => {
   const { id } = useParams();
   const [reading, setReading] = useState(null);
+  const [isAbnormal, setIsAbnormal] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [anomalyModalOpen, setAnomalyModalOpen] = useState(false);
@@ -38,6 +40,7 @@ const MeterReadingDetails = () => {
     reviewed: false,
     reviewNotes: "",
     resolved: false,
+    action: "",
   });
   const [readingValues, setReadingValues] = useState({
     reading: "",
@@ -50,36 +53,58 @@ const MeterReadingDetails = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState("error");
 
   const { currentUser } = useAuthStore();
-  const { darkMode } = useThemeStore();
   const navigate = useNavigate();
-  const theme = getTheme(darkMode ? "dark" : "light");
-  const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
+  const theme = getTheme();
+  const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:5000/api";
 
   useEffect(() => {
     if (!currentUser) {
       navigate("/login");
+      return;
     }
   }, [currentUser, navigate]);
 
   useEffect(() => {
     const fetchReadingDetails = async () => {
+      setLoading(true);
+      setError(null);
       try {
-        const response = await axios.get(`${BASEURL}/meter-reading/${id}`, {
-          params: { tenantId: currentUser?.tenantId },
-          withCredentials: true,
-        });
-        setReading(response.data.data);
-        setReadingValues({
-          reading: response.data.data.reading.toString(),
-          consumption: response.data.data.consumption.toString(),
-          meterPhotoUrl: response.data.data.meterPhotoUrl || "",
-        });
-        if (response.data.data.isAbnormal) {
-          setAnomalyDetails({
-            reviewed: response.data.data.anomalyDetails?.reviewed || false,
-            reviewNotes: response.data.data.anomalyDetails?.reviewNotes || "",
-            resolved: response.data.data.anomalyDetails?.resolved || false,
+        // Try normal reading endpoint first
+        try {
+          const response = await axios.get(`${BASEURL}/meter-reading/normal/${id}`, {
+            params: { tenantId: currentUser?.tenantId },
+            withCredentials: true,
           });
+          setReading(response.data.data);
+          setIsAbnormal(false);
+          setReadingValues({
+            reading: response.data.data.reading.toString(),
+            consumption: response.data.data.consumption.toString(),
+            meterPhotoUrl: response.data.data.meterPhotoUrl || "",
+          });
+        } catch (normalErr) {
+          // If normal reading fails with 404, try abnormal endpoint
+          if (normalErr.response?.status === 404) {
+            const response = await axios.get(`${BASEURL}/meter-reading/abnormal/${id}`, {
+              params: { tenantId: currentUser?.tenantId },
+              withCredentials: true,
+            });
+            setReading(response.data.data);
+            setIsAbnormal(true);
+            setReadingValues({
+              reading: response.data.data.reading.toString(),
+              consumption: response.data.data.consumption.toString(),
+              meterPhotoUrl: response.data.data.meterPhotoUrl || "",
+            });
+            setAnomalyDetails({
+              reviewed: response.data.data.reviewed || false,
+              reviewNotes: response.data.data.reviewNotes || "",
+              resolved: response.data.data.resolved || false,
+              action: response.data.data.action || "",
+            });
+          } else {
+            throw normalErr;
+          }
         }
       } catch (err) {
         setError(err.response?.data?.message || "Failed to fetch meter reading details.");
@@ -117,7 +142,7 @@ const MeterReadingDetails = () => {
   const handleAnomalyInputChange = (field) => (e) => {
     setAnomalyDetails((prev) => ({
       ...prev,
-      [field]: field === "reviewNotes" ? e.target.value : e.target.checked,
+      [field]: field === "reviewNotes" || field === "action" ? e.target.value : e.target.checked,
     }));
   };
 
@@ -128,17 +153,35 @@ const MeterReadingDetails = () => {
     }));
   };
 
+  const validateReadingValues = () => {
+    const errors = {};
+    if (!readingValues.reading || isNaN(parseFloat(readingValues.reading)) || parseFloat(readingValues.reading) < 0) {
+      errors.reading = "Reading must be a non-negative number";
+    }
+    if (
+      !readingValues.consumption ||
+      isNaN(parseFloat(readingValues.consumption)) ||
+      parseFloat(readingValues.consumption) < 0
+    ) {
+      errors.consumption = "Consumption must be a non-negative number";
+    }
+    return errors;
+  };
+
   const handleUpdateAnomaly = async () => {
     setUpdateLoading(true);
     try {
       const response = await axios.put(
-        `${BASEURL}/meter-reading/${id}`,
+        `${BASEURL}/meter-reading/abnormal/${id}`,
         anomalyDetails,
         { withCredentials: true }
       );
       setReading((prev) => ({
         ...prev,
-        anomalyDetails: { ...prev.anomalyDetails, ...anomalyDetails },
+        reviewed: response.data.data.reviewed,
+        reviewNotes: response.data.data.reviewNotes,
+        resolved: response.data.data.resolved,
+        action: response.data.data.action,
       }));
       setAnomalyModalOpen(false);
       setSnackbarMessage("Anomaly details updated successfully!");
@@ -156,6 +199,14 @@ const MeterReadingDetails = () => {
   };
 
   const handleUpdateValues = async () => {
+    const validationErrors = validateReadingValues();
+    if (Object.keys(validationErrors).length > 0) {
+      setSnackbarMessage(validationErrors.reading || validationErrors.consumption);
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+
     setUpdateLoading(true);
     try {
       const payload = {
@@ -163,19 +214,15 @@ const MeterReadingDetails = () => {
         consumption: parseFloat(readingValues.consumption),
         meterPhotoUrl: readingValues.meterPhotoUrl || null,
       };
-      if (isNaN(payload.reading) || isNaN(payload.consumption)) {
-        throw new Error("Reading and consumption must be valid numbers.");
-      }
-      const response = await axios.put(
-        `${BASEURL}/meter-reading/${id}/values`,
-        payload,
-        { withCredentials: true }
-      );
+      const endpoint = isAbnormal
+        ? `${BASEURL}/meter-reading/abnormal/${id}/values`
+        : `${BASEURL}/meter-reading/normal/${id}/values`;
+      const response = await axios.put(endpoint, payload, { withCredentials: true });
       setReading((prev) => ({
         ...prev,
-        reading: payload.reading,
-        consumption: payload.consumption,
-        meterPhotoUrl: payload.meterPhotoUrl,
+        reading: response.data.data.reading,
+        consumption: response.data.data.consumption,
+        meterPhotoUrl: response.data.data.meterPhotoUrl,
       }));
       setValuesModalOpen(false);
       setSnackbarMessage("Meter reading values updated successfully!");
@@ -193,9 +240,10 @@ const MeterReadingDetails = () => {
   };
 
   // Calculate how many times the consumption exceeds the average
-  const consumptionFactor = reading?.isAbnormal && reading?.averageConsumption > 0
-    ? (reading.consumption / reading.averageConsumption).toFixed(2)
-    : null;
+  const consumptionFactor =
+    isAbnormal && reading?.averageConsumption > 0
+      ? (reading.consumption / reading.averageConsumption).toFixed(2)
+      : null;
 
   if (loading) {
     return (
@@ -207,7 +255,7 @@ const MeterReadingDetails = () => {
 
   if (error) {
     return (
-      <Box sx={{ maxWidth: 800, mx: "auto", p: 3 }}>
+      <Box sx={{ maxWidth: 800, mx: "auto", p: 3, bgcolor: theme.palette.primary.main }}>
         <TitleComponent title="Meter Reading Details" />
         <Alert severity="error" sx={{ mt: 2, borderRadius: 2, bgcolor: theme.palette.grey[300] }}>
           {error}
@@ -218,7 +266,7 @@ const MeterReadingDetails = () => {
 
   if (!reading) {
     return (
-      <Box sx={{ maxWidth: 800, mx: "auto", p: 3 }}>
+      <Box sx={{ maxWidth: 800, mx: "auto", p: 3, bgcolor: theme.palette.primary.main }}>
         <TitleComponent title="Meter Reading Details" />
         <Typography variant="h6" color={theme.palette.grey[100]} align="center">
           No meter reading data available.
@@ -231,12 +279,12 @@ const MeterReadingDetails = () => {
     <Fade in={!loading}>
       <Box
         sx={{
-          width: "100%",
+          maxWidth: 800,
           mx: "auto",
           p: 3,
           mt: 2,
-          ml: 20,
           position: "relative",
+          bgcolor: theme.palette.primary.main,
         }}
       >
         <IconButton
@@ -246,17 +294,16 @@ const MeterReadingDetails = () => {
             top: 16,
             left: 16,
             color: theme.palette.greenAccent.main,
-            "&:hover": {
-              bgcolor: theme.palette.greenAccent.main + "20",
-            },
+            "&:hover": { bgcolor: theme.palette.greenAccent.main + "20" },
           }}
+          aria-label="Go back"
         >
           <ArrowBackIcon sx={{ fontSize: 40 }} />
         </IconButton>
 
         <TitleComponent title="Meter Reading Details" />
 
-        {reading.isAbnormal && (
+        {isAbnormal && (
           <Alert
             severity="warning"
             sx={{
@@ -264,14 +311,12 @@ const MeterReadingDetails = () => {
               borderRadius: 2,
               bgcolor: theme.palette.grey[300],
               color: theme.palette.grey[900],
-              width: "50%",
-              ml: 20,
             }}
           >
-            You need to manually intervene and update the meter reading because the consumption has been flagged as abnormal.
+            This meter reading is flagged as abnormal.
             {consumptionFactor && (
               <Typography variant="body2" sx={{ mt: 1 }}>
-                Consumption is {consumptionFactor} times the average.
+                Consumption is {consumptionFactor} times the average ({reading.averageConsumption} m³).
               </Typography>
             )}
           </Alert>
@@ -284,8 +329,6 @@ const MeterReadingDetails = () => {
             boxShadow: 3,
             bgcolor: theme.palette.primary.main,
             color: theme.palette.grey[100],
-            width: "50%",
-            ml: 20,
           }}
         >
           <CardHeader
@@ -293,24 +336,26 @@ const MeterReadingDetails = () => {
             title="Meter Reading Information"
             titleTypographyProps={{ variant: "h6", fontWeight: "bold" }}
             action={
-              reading.isAbnormal && (
-                <Box>
+              <Box>
+                <IconButton
+                  onClick={handleValuesModalOpen}
+                  sx={{ color: theme.palette.greenAccent.main }}
+                  title="Edit Reading Values"
+                  aria-label="Edit reading values"
+                >
+                  <EditIcon />
+                </IconButton>
+                {isAbnormal && (
                   <IconButton
                     onClick={handleAnomalyModalOpen}
                     sx={{ color: theme.palette.greenAccent.main }}
                     title="Edit Anomaly Details"
+                    aria-label="Edit anomaly details"
                   >
                     <EditIcon />
                   </IconButton>
-                  <IconButton
-                    onClick={handleValuesModalOpen}
-                    sx={{ color: theme.palette.greenAccent.main }}
-                    title="Edit Reading Values"
-                  >
-                    <EditIcon />
-                  </IconButton>
-                </Box>
-              )
+                )}
+              </Box>
             }
           />
           <CardContent>
@@ -328,7 +373,7 @@ const MeterReadingDetails = () => {
                 <Chip
                   label={reading.type}
                   sx={{
-                    bgcolor: reading.isAbnormal ? "#f44336" : theme.palette.greenAccent.main,
+                    bgcolor: isAbnormal ? "#f44336" : theme.palette.greenAccent.main,
                     color: "#fff",
                   }}
                   size="small"
@@ -344,20 +389,20 @@ const MeterReadingDetails = () => {
                 <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                   Reading
                 </Typography>
-                <Typography variant="body1">{reading.reading} Units</Typography>
+                <Typography variant="body1">{reading.reading} m³</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                   Consumption
                 </Typography>
-                <Typography variant="body1">{reading.consumption} Units</Typography>
+                <Typography variant="body1">{reading.consumption} m³</Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
                 <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                   Average Consumption
                 </Typography>
                 <Typography variant="body1">
-                  {reading.averageConsumption != null ? `${reading.averageConsumption} Units` : "N/A"}
+                  {reading.averageConsumption != null ? `${reading.averageConsumption} m³` : "N/A"}
                 </Typography>
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -365,7 +410,9 @@ const MeterReadingDetails = () => {
                   Period
                 </Typography>
                 <Typography variant="body1">
-                  {new Date(reading.period).toLocaleString("en-US", { timeZone: "Africa/Nairobi" })}
+                  {reading.period
+                    ? format(new Date(reading.period), "MMM yyyy", { timeZone: "Africa/Nairobi" })
+                    : "N/A"}
                 </Typography>
               </Grid>
               {reading.meterPhotoUrl && (
@@ -374,9 +421,15 @@ const MeterReadingDetails = () => {
                     Meter Photo
                   </Typography>
                   <Typography variant="body1">
-                    <a href={reading.meterPhotoUrl} target="_blank" rel="noopener noreferrer">
+                    <Button
+                      component="a"
+                      href={reading.meterPhotoUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      sx={{ color: theme.palette.greenAccent.main }}
+                    >
                       View Photo
-                    </a>
+                    </Button>
                   </Typography>
                 </Grid>
               )}
@@ -391,14 +444,18 @@ const MeterReadingDetails = () => {
                   Created At
                 </Typography>
                 <Typography variant="body1">
-                  {new Date(reading.createdAt).toLocaleString("en-US", { timeZone: "Africa/Nairobi" })}
+                  {reading.createdAt
+                    ? format(new Date(reading.createdAt), "dd MMM yyyy, HH:mm:ss", {
+                        timeZone: "Africa/Nairobi",
+                      })
+                    : "N/A"}
                 </Typography>
               </Grid>
             </Grid>
           </CardContent>
         </Card>
 
-        {reading.isAbnormal && reading.anomalyDetails && (
+        {isAbnormal && (
           <Card
             sx={{
               mb: 3,
@@ -416,48 +473,44 @@ const MeterReadingDetails = () => {
             />
             <CardContent>
               <Grid container spacing={2}>
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color={theme.palette.grey[100]}>
-                    Anomaly Reason
-                  </Typography>
-                  <Typography variant="body1">{reading.anomalyDetails.anomalyReason}</Typography>
-                </Grid>
+                {reading.action && (
+                  <Grid item xs={12} sm={6}>
+                    <Typography variant="subtitle2" color={theme.palette.grey[100]}>
+                      Action
+                    </Typography>
+                    <Typography variant="body1">{reading.action}</Typography>
+                  </Grid>
+                )}
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                     Reviewed
                   </Typography>
                   <Chip
-                    label={reading.anomalyDetails.reviewed ? "Yes" : "No"}
+                    label={reading.reviewed ? "Yes" : "No"}
                     sx={{
-                      bgcolor: reading.anomalyDetails.reviewed ? theme.palette.greenAccent.main : theme.palette.grey[300],
-                      color: reading.anomalyDetails.reviewed ? "#fff" : theme.palette.grey[100],
+                      bgcolor: reading.reviewed ? theme.palette.greenAccent.main : theme.palette.grey[300],
+                      color: reading.reviewed ? "#fff" : theme.palette.grey[100],
                     }}
                     size="small"
                   />
                 </Grid>
-                {reading.anomalyDetails.reviewNotes && (
+                {reading.reviewNotes && (
                   <Grid item xs={12}>
                     <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                       Review Notes
                     </Typography>
-                    <Typography variant="body1">{reading.anomalyDetails.reviewNotes}</Typography>
+                    <Typography variant="body1">{reading.reviewNotes}</Typography>
                   </Grid>
                 )}
-                <Grid item xs={12} sm={6}>
-                  <Typography variant="subtitle2" color={theme.palette.grey[100]}>
-                    Action
-                  </Typography>
-                  <Typography variant="body1">{reading.anomalyDetails.action || "None"}</Typography>
-                </Grid>
                 <Grid item xs={12} sm={6}>
                   <Typography variant="subtitle2" color={theme.palette.grey[100]}>
                     Resolved
                   </Typography>
                   <Chip
-                    label={reading.anomalyDetails.resolved ? "Yes" : "No"}
+                    label={reading.resolved ? "Yes" : "No"}
                     sx={{
-                      bgcolor: reading.anomalyDetails.resolved ? theme.palette.greenAccent.main : theme.palette.grey[300],
-                      color: reading.anomalyDetails.resolved ? "#fff" : theme.palette.grey[100],
+                      bgcolor: reading.resolved ? theme.palette.greenAccent.main : theme.palette.grey[300],
+                      color: reading.resolved ? "#fff" : theme.palette.grey[100],
                     }}
                     size="small"
                   />
@@ -476,14 +529,15 @@ const MeterReadingDetails = () => {
         >
           <Box
             sx={{
-              bgcolor: theme.palette.background.paper,
+              bgcolor: theme.palette.primary.main,
               borderRadius: 2,
               p: 3,
               width: 400,
               boxShadow: 24,
+              color: theme.palette.grey[100],
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, color: theme.palette.grey[900] }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               Edit Anomaly Details
             </Typography>
             <TextField
@@ -494,42 +548,61 @@ const MeterReadingDetails = () => {
               multiline
               rows={4}
               sx={{ mb: 2 }}
+              InputLabelProps={{ style: { color: theme.palette.grey[100] } }}
+              InputProps={{ style: { color: theme.palette.grey[100] } }}
             />
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <input
-                type="checkbox"
-                checked={anomalyDetails.reviewed}
-                onChange={handleAnomalyInputChange("reviewed")}
-                id="reviewed-checkbox"
-              />
-              <Typography variant="body1" sx={{ ml: 1, color: theme.palette.grey[900] }}>
-                Reviewed
-              </Typography>
-            </Box>
-            <Box sx={{ display: "flex", alignItems: "center", mb: 2 }}>
-              <input
-                type="checkbox"
-                checked={anomalyDetails.resolved}
-                onChange={handleAnomalyInputChange("resolved")}
-                id="resolved-checkbox"
-              />
-              <Typography variant="body1" sx={{ ml: 1, color: theme.palette.grey[900] }}>
-                Resolved
-              </Typography>
-            </Box>
+            <TextField
+              label="Action"
+              value={anomalyDetails.action}
+              onChange={handleAnomalyInputChange("action")}
+              fullWidth
+              sx={{ mb: 2 }}
+              InputLabelProps={{ style: { color: theme.palette.grey[100] } }}
+              InputProps={{ style: { color: theme.palette.grey[100] } }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={anomalyDetails.reviewed}
+                  onChange={handleAnomalyInputChange("reviewed")}
+                  sx={{ color: theme.palette.greenAccent.main }}
+                />
+              }
+              label="Reviewed"
+              sx={{ mb: 2, color: theme.palette.grey[100] }}
+            />
+            <FormControlLabel
+              control={
+                <Checkbox
+                  checked={anomalyDetails.resolved}
+                  onChange={handleAnomalyInputChange("resolved")}
+                  sx={{ color: theme.palette.greenAccent.main }}
+                />
+              }
+              label="Resolved"
+              sx={{ mb: 2, color: theme.palette.grey[100] }}
+            />
             <Box sx={{ display: "flex", gap: 2 }}>
               <Button
                 variant="contained"
                 onClick={handleUpdateAnomaly}
                 disabled={updateLoading}
-                sx={{ bgcolor: theme.palette.greenAccent.main, color: theme.palette.grey[100] }}
+                sx={{
+                  bgcolor: theme.palette.greenAccent.main,
+                  color: "#fff",
+                  "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 },
+                }}
               >
                 {updateLoading ? <CircularProgress size={24} /> : "Save Changes"}
               </Button>
               <Button
                 variant="outlined"
                 onClick={handleModalClose}
-                sx={{ borderColor: theme.palette.grey[300], color: theme.palette.grey[900] }}
+                sx={{
+                  borderColor: theme.palette.grey[300],
+                  color: theme.palette.grey[100],
+                  "&:hover": { borderColor: theme.palette.grey[300], opacity: 0.9 },
+                }}
               >
                 Cancel
               </Button>
@@ -546,18 +619,19 @@ const MeterReadingDetails = () => {
         >
           <Box
             sx={{
-              bgcolor: theme.palette.background.paper,
+              bgcolor: theme.palette.primary.main,
               borderRadius: 2,
               p: 3,
               width: 400,
               boxShadow: 24,
+              color: theme.palette.grey[100],
             }}
           >
-            <Typography variant="h6" sx={{ mb: 2, color: theme.palette.grey[900] }}>
+            <Typography variant="h6" sx={{ mb: 2 }}>
               Edit Meter Reading Values
             </Typography>
             <TextField
-              label="Reading (Units)"
+              label="Reading (m³)"
               value={readingValues.reading}
               onChange={handleValuesInputChange("reading")}
               fullWidth
@@ -569,9 +643,12 @@ const MeterReadingDetails = () => {
                   ? "Must be a valid number"
                   : ""
               }
+              inputProps={{ step: "0.01" }}
+              InputLabelProps={{ style: { color: theme.palette.grey[100] } }}
+              InputProps={{ style: { color: theme.palette.grey[100] } }}
             />
             <TextField
-              label="Consumption (Units)"
+              label="Consumption (m³)"
               value={readingValues.consumption}
               onChange={handleValuesInputChange("consumption")}
               fullWidth
@@ -583,6 +660,9 @@ const MeterReadingDetails = () => {
                   ? "Must be a valid number"
                   : ""
               }
+              inputProps={{ step: "0.01" }}
+              InputLabelProps={{ style: { color: theme.palette.grey[100] } }}
+              InputProps={{ style: { color: theme.palette.grey[100] } }}
             />
             <TextField
               label="Meter Photo URL"
@@ -590,20 +670,34 @@ const MeterReadingDetails = () => {
               onChange={handleValuesInputChange("meterPhotoUrl")}
               fullWidth
               sx={{ mb: 2 }}
+              InputLabelProps={{ style: { color: theme.palette.grey[100] } }}
+              InputProps={{ style: { color: theme.palette.grey[100] } }}
             />
             <Box sx={{ display: "flex", gap: 2 }}>
               <Button
                 variant="contained"
                 onClick={handleUpdateValues}
-                disabled={updateLoading || isNaN(parseFloat(readingValues.reading)) || isNaN(parseFloat(readingValues.consumption))}
-                sx={{ bgcolor: theme.palette.greenAccent.main, color: theme.palette.grey[100] }}
+                disabled={
+                  updateLoading ||
+                  isNaN(parseFloat(readingValues.reading)) ||
+                  isNaN(parseFloat(readingValues.consumption))
+                }
+                sx={{
+                  bgcolor: theme.palette.greenAccent.main,
+                  color: "#fff",
+                  "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 },
+                }}
               >
                 {updateLoading ? <CircularProgress size={24} /> : "Save Changes"}
               </Button>
               <Button
                 variant="outlined"
                 onClick={handleModalClose}
-                sx={{ borderColor: theme.palette.grey[300], color: theme.palette.grey[900] }}
+                sx={{
+                  borderColor: theme.palette.grey[300],
+                  color: theme.palette.grey[100],
+                  "&:hover": { borderColor: theme.palette.grey[300], opacity: 0.9 },
+                }}
               >
                 Cancel
               </Button>
@@ -641,8 +735,9 @@ const MeterReadingDetails = () => {
               },
             }}
             onClick={() => navigate("/water-readings")}
+            aria-label="Back to water readings"
           >
-            Back to Meter Readings
+            Back to Water Readings
           </Button>
         </Box>
       </Box>
