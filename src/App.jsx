@@ -6,52 +6,52 @@ import { useAuthStore, useThemeStore } from "./store/authStore";
 import { getTheme } from "./store/theme";
 
 import HomeScreen from "./pages/home";
-import Login from "./pages/login";
+import Login from "./pages/auth/login";
 
 import ProtectedRoute from "./ProtectedRoute";
 import Navbar from "./global/navbar";
 import Sidebar from "./global/sidebar";
-import CustomersScreen from "./pages/customers";
-import InvoiceList from "./pages/Invoices";
-import AddCustomer from "./pages/addCustomers";
-import CreateInvoice from "./pages/createInvoice";
-import InvoiceDetails from "./pages/InvoiceDetail";
-import CustomerDetails from "./pages/customerDetails";
-import Payments from "./pages/payments";
-import PaymentDetails from "./pages/PaymentDetail";
-import CreatePayment from "./pages/addPayment";
-import Receipts from "./pages/receipts";
-import ReceiptDetail from "./pages/receiptDetails";
-import SentSMSPage from "./pages/sentSMS";
-import SmsScreen from "./pages/sendSMS";
-import SendBillsScreen from "./pages/sendBills";
-import DebtManager from "./pages/debtManager";
-import ReportScreen from "./pages/reports";
+import CustomersScreen from "./pages/tenants/customers";
+import InvoiceList from "./pages/invoices/Invoices";
+import AddCustomer from "./pages/tenants/addCustomers";
+import CreateInvoice from "./pages/invoices/createInvoice";
+import InvoiceDetails from "./pages/invoices/InvoiceDetail";
+import CustomerDetails from "./pages/tenants/customerDetails";
+import Payments from "./pages/payments/payments";
+import PaymentDetails from "./pages/payments/PaymentDetail";
+import CreatePayment from "./pages/payments/addPayment";
+import Receipts from "./pages/payments/receipts/receipts";
+import ReceiptDetail from "./pages/payments/receipts/receiptDetails";
+import SentSMSPage from "./pages/sms/sentSMS";
+import SmsScreen from "./pages/sms/sendSMS";
+import SendBillsScreen from "./pages/sms/sendBills";
+import DebtManager from "./pages/sms/debtManager";
+import ReportScreen from "./pages/reports/reports";
 import ComingSoonPage from "./pages/comingSoon";
-import CustomerEditScreen from "./pages/editCustomers";
-import ForgotPasswordScreen from "./pages/forgotPassword";
-import ChangePasswordScreen from "./pages/ChangePasswordScreen";
-import VerifyOtpScreen from "./pages/VerifyOtpScreen";
-import UserManagementScreen from "./pages/users";
-import UserDetails from "./pages/userDetails";
-import AddUser from "./pages/addUser";
-import Organization from "./pages/orgDetails";
-import EditOrganization from "./pages/editOrg";
-import AssignTaskScreen from "./pages/createTask";
-import FetchTasksScreen from "./pages/fetchTasks";
-import TaskDetailsScreen from "./pages/taskDetails";
-import BuildingsScreen from "./pages/property";
-import BuildingDetailsScreen from "./pages/propertyDetails";
-import CreatePropertyAndUnitsScreen from "./pages/addProperty";
-import CreateReadingScreen from "./pages/addutilities";
-import LandlordsScreen from "./pages/landlords";
-import TerminateLease from "./pages/terminateLease";
-import LandlordDetailsScreen from "./pages/landlordDetails";
-import EditBuildingScreen from "./pages/editBuilding";
-import WaterReadingsList from "./pages/waterReadings";
-import MeterReadingDetails from "./pages/meterReadingDetails";
-import AddPropertyScreen from "./pages/addProperty";
-import AddUnitScreen from "./pages/addUnit";
+import CustomerEditScreen from "./pages/tenants/editCustomers";
+import ForgotPasswordScreen from "./pages/auth/forgotPassword";
+import ChangePasswordScreen from "./pages/auth/ChangePasswordScreen";
+import VerifyOtpScreen from "./pages/auth/VerifyOtpScreen";
+import UserManagementScreen from "./pages/users/users";
+import UserDetails from "./pages/users/userDetails";
+import AddUser from "./pages/users/addUser";
+import Organization from "./pages/org/orgDetails";
+import EditOrganization from "./pages/org/editOrg";
+import AssignTaskScreen from "./pages/tasks/createTask";
+import FetchTasksScreen from "./pages/tasks/fetchTasks";
+import TaskDetailsScreen from "./pages/tasks/taskDetails";
+import BuildingsScreen from "./pages/property/property";
+import BuildingDetailsScreen from "./pages/property/propertyDetails";
+import LandlordsScreen from "./pages/landlord/landlords";
+import TerminateLease from "./pages/tenants/terminateLease";
+import LandlordDetailsScreen from "./pages/landlord/landlordDetails";
+import EditBuildingScreen from "./pages/property/editBuilding";
+import WaterReadingsList from "./pages/utility/meterReading/waterReadings";
+import MeterReadingDetails from "./pages/utility/meterReading/meterReadingDetails";
+import AddPropertyScreen from "./pages/property/addProperty";
+import AddUnitScreen from "./pages/property/addUnit";
+import CreateWaterReading from "./pages/meterReadings/addReadings";
+import ExpensesScreen from "./pages/property/getAllPropertyExpenses";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -237,6 +237,17 @@ const App = () => {
                   }
                 /> 
 
+                    <Route
+                  path="/water-readings/create"
+                  element={
+                    <ProtectedRoute>
+                      <CreateWaterReading/>
+                    </ProtectedRoute>
+                  }
+                />
+
+               
+
                 <Route
                   path="/water-reading/:id"
                   element={
@@ -415,7 +426,34 @@ const App = () => {
                       <TaskDetailsScreen />
                     </ProtectedRoute>
                   }
-                />  
+                /> 
+
+                <Route 
+                path="/expenses" 
+                element={<ProtectedRoute>
+                      < ExpensesScreen/>
+                    </ProtectedRoute>}/>
+
+                <Route
+                  path="/utility/gas"
+                  element={
+                    <ProtectedRoute>
+                      <ComingSoonPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route
+                  path="/utility/electricity"
+                  element={
+                    <ProtectedRoute>
+                      <ComingSoonPage />
+                    </ProtectedRoute>
+                  }
+                />
+                
+
+
               </Routes>
             </Box>
           </Box>

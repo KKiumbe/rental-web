@@ -33,7 +33,6 @@ import { useNavigate } from "react-router-dom";
 import MenuIcon from "@mui/icons-material/Menu";
 import BusinessIcon from "@mui/icons-material/Business";
 import HomeWorkIcon from "@mui/icons-material/HomeWork";
-
 const Sidebar = () => {
   const navigate = useNavigate();
   const [open, setOpen] = useState(true); // Controls sidebar collapse
@@ -46,7 +45,8 @@ const Sidebar = () => {
     reports: false,
     tasks: false,
     properties: false,
-    utilities: false, // Added for Utility menu
+    utilities: false, 
+    expenses: false
   });
 
   // Toggle sidebar
@@ -141,29 +141,40 @@ const Sidebar = () => {
         </Collapse>
 
         {/* Properties Menu */}
-        <ListItem button onClick={() => toggleSubmenu("properties")} sx={{ py: 1 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <Business sx={{ fontSize: 24 }} />
-          </ListItemIcon>
-          {open && <ListItemText primary="Properties" sx={{ fontSize: "0.9rem" }} />}
-          {open && (submenuOpen.properties ? <ExpandLess /> : <ExpandMore />)}
-        </ListItem>
-        <Collapse in={submenuOpen.properties} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/properties")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <Business sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="Properties" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/landlords")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <HomeWorkIcon sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="Landlords" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-          </List>
-        </Collapse>
+    <ListItem button onClick={() => toggleSubmenu("properties")} sx={{ py: 1 }}>
+  <ListItemIcon sx={{ minWidth: 40 }}>
+    <Business sx={{ fontSize: 24 }} />
+  </ListItemIcon>
+  {open && <ListItemText primary="Properties" sx={{ fontSize: "0.9rem" }} />}
+  {open && (submenuOpen.properties ? <ExpandLess /> : <ExpandMore />)}
+</ListItem>
+
+<Collapse in={submenuOpen.properties} timeout="auto" unmountOnExit>
+  <List component="div" disablePadding>
+    <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/properties")}>
+      <ListItemIcon sx={{ minWidth: 30 }}>
+        <Business sx={{ fontSize: 20 }} />
+      </ListItemIcon>
+      {open && <ListItemText primary=" All Properties" sx={{ fontSize: "0.8rem" }} />}
+    </ListItem>
+
+    <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/landlords")}>
+      <ListItemIcon sx={{ minWidth: 30 }}>
+        <HomeWorkIcon sx={{ fontSize: 20 }} />
+      </ListItemIcon>
+      {open && <ListItemText primary="Landlords" sx={{ fontSize: "0.8rem" }} />}
+    </ListItem>
+
+    {/* ✅ Expenses submenu item */}
+    <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/expenses")}>
+      <ListItemIcon sx={{ minWidth: 30 }}>
+        <MonetizationOn sx={{ fontSize: 20 }} /> {/* or use ReceiptIcon */}
+      </ListItemIcon>
+      {open && <ListItemText primary="Expenses" sx={{ fontSize: "0.8rem" }} />}
+    </ListItem>
+  </List>
+</Collapse>
+
 
         {/* Invoices Menu */}
         <ListItem button onClick={() => toggleSubmenu("invoices")} sx={{ py: 1 }}>
