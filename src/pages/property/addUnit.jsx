@@ -55,6 +55,7 @@ const AddUnitScreen = () => {
     unitNumber: '',
     monthlyCharge: '',
     depositAmount: '',
+    waterDepositAmount: '',
     garbageCharge: '',
     serviceCharge: '',
     status: 'VACANT',
@@ -142,6 +143,9 @@ const AddUnitScreen = () => {
     if (!unitForm.depositAmount || isNaN(unitForm.depositAmount) || Number(unitForm.depositAmount) < 0) {
       newErrors.depositAmount = 'Must be a non-negative number';
     }
+    if (unitForm.waterDepositAmount && (isNaN(unitForm.waterDepositAmount) || Number(unitForm.waterDepositAmount) < 0)) {
+      newErrors.waterDepositAmount = 'Must be a non-negative number';
+    }
     if (unitForm.garbageCharge && (isNaN(unitForm.garbageCharge) || Number(unitForm.garbageCharge) < 0)) {
       newErrors.garbageCharge = 'Must be a non-negative number';
     }
@@ -168,6 +172,7 @@ const AddUnitScreen = () => {
         ...unitForm,
         monthlyCharge: Number(unitForm.monthlyCharge),
         depositAmount: Number(unitForm.depositAmount),
+        waterDepositAmount: unitForm.waterDepositAmount ? Number(unitForm.waterDepositAmount) : 0,
         garbageCharge: unitForm.garbageCharge ? Number(unitForm.garbageCharge) : 0,
         serviceCharge: unitForm.serviceCharge ? Number(unitForm.serviceCharge) : 0,
       };
@@ -187,6 +192,7 @@ const AddUnitScreen = () => {
         unitNumber: '',
         monthlyCharge: '',
         depositAmount: '',
+        waterDepositAmount: '',
         garbageCharge: '',
         serviceCharge: '',
         status: 'VACANT',
@@ -296,6 +302,20 @@ const AddUnitScreen = () => {
                   onChange={handleUnitChange}
                   error={!!errors.unit.depositAmount}
                   helperText={errors.unit.depositAmount}
+                  variant="outlined"
+                  size="small"
+                  margin="normal"
+                  inputProps={{ step: '1' }}
+                />
+                <TextField
+                  fullWidth
+                  label="Water Deposit Amount (ksh)"
+                  name="waterDepositAmount"
+                  type="number"
+                  value={unitForm.waterDepositAmount}
+                  onChange={handleUnitChange}
+                  error={!!errors.unit.waterDepositAmount}
+                  helperText={errors.unit.waterDepositAmount}
                   variant="outlined"
                   size="small"
                   margin="normal"

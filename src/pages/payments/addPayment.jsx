@@ -10,85 +10,93 @@ import {
   Alert,
   MenuItem,
   Paper,
-  Grid,
+  Divider,
+  InputAdornment,
   ToggleButton,
   ToggleButtonGroup,
-  InputAdornment,
+  alpha,
+  Chip,
 } from "@mui/material";
-import { useTheme } from "@mui/material/styles";
 import {
   Person as PersonIcon,
   Phone as PhoneIcon,
   MeetingRoom as UnitIcon,
+  Payments as PaymentsIcon,
+  CheckCircleOutline as CheckCircleIcon,
+  AccountBalanceWallet as WalletIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
-import TitleComponent from "../../components/title";
+import { getTheme } from "../../store/theme";
 import axios from "axios";
 import debounce from "lodash/debounce";
 
+const PAYMENT_MODES = ["CASH", "MPESA", "BANK_TRANSFER", "CREDIT_CARD", "DEBIT_CARD"];
+
+const modeColor = (mode) => {
+  if (mode === "MPESA")         return "#4caf50";
+  if (mode === "CASH")          return "#1976d2";
+  if (mode === "BANK_TRANSFER") return "#9c27b0";
+  return "#90a4ae";
+};
+
 const CreatePayment = () => {
   const navigate = useNavigate();
-  const theme = useTheme();
+  const theme = getTheme();
   const currentUser = useAuthStore((state) => state.currentUser);
   const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
 
-  // State management
-  const [searchMode,      setSearchMode]      = useState("name");   // "name" | "phone" | "unit"
-  const [searchQuery,     setSearchQuery]     = useState("");
-  const [searchResults,   setSearchResults]   = useState([]);
+  const [searchMode,       setSearchMode]       = useState("name");
+  const [searchQuery,      setSearchQuery]      = useState("");
+  const [searchResults,    setSearchResults]    = useState([]);
   const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [isSearching,     setIsSearching]     = useState(false);
-  const [formData,        setFormData]        = useState({ totalAmount: "", modeOfPayment: "" });
-  const [snackbar,        setSnackbar]        = useState({ open: false, message: "", severity: "info" });
-  const [isProcessing,    setIsProcessing]    = useState(false);
+  const [isSearching,      setIsSearching]      = useState(false);
+  const [formData,         setFormData]         = useState({ totalAmount: "", modeOfPayment: "" });
+  const [snackbar,         setSnackbar]         = useState({ open: false, message: "", severity: "info" });
+  const [isProcessing,     setIsProcessing]     = useState(false);
+  const [submitted,        setSubmitted]        = useState(false);
 
-  // Redirect to login if not authenticated
+  const isDark        = theme.palette.mode === "dark";
+  const surfaceBg     = isDark ? "#141824" : "#f4f6fb";
+  const cardBg        = isDark ? "#1c2030" : "#ffffff";
+  const borderColor   = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const headerBg      = isDark ? "#181d2e" : "#f0f3f9";
+  const textPrimary   = theme.palette.text.primary;
+  const textSecondary = theme.palette.text.secondary;
+  const accentGreen   = theme.palette.greenAccent.main;
+  const accentBlue    = theme.palette.blueAccent?.main || "#1976d2";
+
   useEffect(() => {
     if (!currentUser) navigate("/login");
   }, [currentUser, navigate]);
 
-  // Unified search handler — uses /search-customers endpoint
   const handleSearch = async (query, mode) => {
-    const trimmedQuery = (query || "").trim();
-    if (!trimmedQuery) {
-      setSearchResults([]);
-      return;
-    }
-
-    // Phone needs at least 10 digits
-    if (mode === "phone" && trimmedQuery.length < 10) {
-      setSearchResults([]);
-      return;
-    }
+    const q = (query || "").trim();
+    if (!q) { setSearchResults([]); return; }
+    if (mode === "phone" && q.length < 10) { setSearchResults([]); return; }
 
     setIsSearching(true);
     try {
       const params = {};
-      if (mode === "name")  params.name       = trimmedQuery;
-      if (mode === "phone") params.phone      = trimmedQuery;
-      if (mode === "unit")  params.unitNumber = trimmedQuery;
+      if (mode === "name")  params.name       = q;
+      if (mode === "phone") params.phone      = q;
+      if (mode === "unit")  params.unitNumber = q;
 
-      const response = await axios.get(`${BASEURL}/search-customers`, {
-        params,
-        withCredentials: true,
-      });
-      const results = response.data?.customers || [];
-
+      const { data } = await axios.get(`${BASEURL}/search-customers`, { params, withCredentials: true });
+      const results = data?.customers || [];
       setSearchResults(results);
       if (!results.length) {
         setSnackbar({ open: true, message: "No customers found", severity: "info" });
       }
-    } catch (error) {
-      console.error("Search error:", error.message);
+    } catch (err) {
       setSnackbar({
         open: true,
         message:
-          error.code === "ERR_NETWORK"
-            ? "Server not reachable. Please check if the backend is running."
-            : error.response?.status === 404
+          err.code === "ERR_NETWORK"
+            ? "Server not reachable."
+            : err.response?.status === 404
             ? "No customers found"
-            : "Error searching customers: " + (error.response?.data?.message || error.message),
+            : "Search error: " + (err.response?.data?.message || err.message),
         severity: "error",
       });
       setSearchResults([]);
@@ -97,62 +105,49 @@ const CreatePayment = () => {
     }
   };
 
-  // Debounced search for smoother UX
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSearch = useCallback(
-    debounce((query, mode) => handleSearch(query, mode), 500),
-    []
-  );
+  const debouncedSearch = useCallback(debounce((q, m) => handleSearch(q, m), 500), []);
 
-  // Handle input change
   const handleInputChange = (e, value) => {
-    const newValue = e?.target?.value ?? value ?? "";
-    setSearchQuery(newValue);
+    const v = e?.target?.value ?? value ?? "";
+    setSearchQuery(v);
     setSelectedCustomer(null);
-    debouncedSearch(newValue, searchMode);
+    debouncedSearch(v, searchMode);
   };
 
-  // Handle customer selection
-  const handleCustomerSelect = (event, newValue) => {
+  const handleCustomerSelect = (_, newValue) => {
     setSelectedCustomer(newValue);
-    if (newValue) {
-      setSearchQuery("");
-      setSearchResults([]);
-    }
+    if (newValue) { setSearchQuery(""); setSearchResults([]); }
   };
 
-  // Handle form field changes
-  const handleFormChange = (field) => (e) => {
+  const handleFormChange = (field) => (e) =>
     setFormData((prev) => ({ ...prev, [field]: e.target.value }));
-  };
 
-  // Submit payment
   const handlePaymentSubmit = async () => {
     const { totalAmount, modeOfPayment } = formData;
     if (!selectedCustomer || !totalAmount || !modeOfPayment) {
-      setSnackbar({ open: true, message: "Please fill all payment details", severity: "error" });
+      setSnackbar({ open: true, message: "Please fill in all payment details", severity: "error" });
       return;
     }
-
-    const payload = {
-      customerId: selectedCustomer.id,
-      totalAmount: parseFloat(totalAmount),
-      modeOfPayment,
-      paidBy: selectedCustomer.firstName,
-    };
-
     setIsProcessing(true);
     try {
-      await axios.post(`${BASEURL}/manual-cash-payment`, payload, { withCredentials: true });
-      setSnackbar({ open: true, message: "Payment created successfully", severity: "success" });
-      setSelectedCustomer(null);
-      setFormData({ totalAmount: "", modeOfPayment: "" });
-      setTimeout(() => navigate("/payments"), 2000);
-    } catch (error) {
-      console.error("Payment error:", error);
+      await axios.post(
+        `${BASEURL}/manual-cash-payment`,
+        {
+          customerId: selectedCustomer.id,
+          totalAmount: parseFloat(totalAmount),
+          modeOfPayment,
+          paidBy: selectedCustomer.firstName,
+        },
+        { withCredentials: true }
+      );
+      setSubmitted(true);
+      setSnackbar({ open: true, message: "Payment recorded successfully", severity: "success" });
+      setTimeout(() => navigate("/payments"), 2200);
+    } catch (err) {
       setSnackbar({
         open: true,
-        message: "Error creating payment: " + (error.response?.data?.message || error.message),
+        message: "Error recording payment: " + (err.response?.data?.message || err.message),
         severity: "error",
       });
     } finally {
@@ -160,198 +155,401 @@ const CreatePayment = () => {
     }
   };
 
-  // Render list results (used for phone and unit search modes)
-  const renderListResults = () =>
-    searchResults.length > 0 && (
-      <Box sx={{ mt: 1, border: "1px solid", borderColor: theme.palette.grey[700], borderRadius: 1 }}>
-        {searchResults.map((customer) => (
-          <Box
-            key={customer.id}
-            sx={{ p: 1.5, cursor: "pointer", "&:hover": { bgcolor: theme.palette.grey[800] } }}
-            onClick={() => handleCustomerSelect(null, customer)}
-          >
-            <Typography sx={{ color: theme.palette.grey[100], fontWeight: 600 }}>
-              {customer.firstName || "Unknown"} {customer.lastName || ""}
-            </Typography>
-            <Typography variant="caption" sx={{ color: theme.palette.grey[400] }}>
-              {customer.phoneNumber || "N/A"} &nbsp;·&nbsp;
-              Unit: {customer.unit?.unitNumber || "—"} &nbsp;·&nbsp;
-              {customer.unit?.building?.name || "—"}
-            </Typography>
-          </Box>
-        ))}
-      </Box>
-    );
+  const resetSearch = () => {
+    setSearchMode("name");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedCustomer(null);
+    setFormData({ totalAmount: "", modeOfPayment: "" });
+    setSubmitted(false);
+  };
 
-  const inputSx = {
+  const fieldSx = {
     "& .MuiOutlinedInput-root": {
-      "& fieldset": { borderColor: theme.palette.grey[300] },
-      "&:hover fieldset": { borderColor: theme.palette.greenAccent.main },
-      "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main },
+      borderRadius: 1.5,
+      bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.02),
+      "& fieldset": { borderColor },
+      "&:hover fieldset": { borderColor: accentGreen },
+      "&.Mui-focused fieldset": { borderColor: accentGreen, borderWidth: 1.5 },
     },
-    "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-    "& .MuiInputBase-input": { color: theme.palette.grey[100] },
-    mb: 1,
+    "& .MuiInputLabel-root": { color: textSecondary },
+    "& .MuiInputLabel-root.Mui-focused": { color: accentGreen },
+    "& .MuiInputBase-input": { color: textPrimary },
   };
 
   return (
-    <Box sx={{ p: 3, justifyContent: "left", alignItems: "center", width: "100vw", margin: 0, boxSizing: "border-box" }}>
-      <TitleComponent title="Create Payment" />
-      <Paper sx={{ maxWidth: 600, ml: 30, p: 3 }}>
-        <Typography variant="h6" gutterBottom sx={{ mb: 2, color: theme.palette.grey[100] }}>
-          Search Customer
-        </Typography>
+    <Box sx={{ minHeight: "100vh", bgcolor: surfaceBg, p: { xs: 2, md: 3 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
 
-        {/* ── Search Mode Toggle ─────────────────────────────────────── */}
-        <ToggleButtonGroup
-          value={searchMode}
-          exclusive
-          onChange={(_, val) => {
-            if (val) {
-              setSearchMode(val);
-              setSearchQuery("");
-              setSearchResults([]);
-              setSelectedCustomer(null);
-            }
+      {/* Page Header */}
+      <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+        <Box
+          sx={{
+            width: 46, height: 46, borderRadius: 2,
+            bgcolor: alpha(accentGreen, 0.12),
+            border: `1px solid ${alpha(accentGreen, 0.2)}`,
+            display: "flex", alignItems: "center", justifyContent: "center",
           }}
-          size="small"
-          sx={{ mb: 2 }}
         >
-          <ToggleButton value="name"  sx={{ color: theme.palette.grey[100], gap: 0.5 }}>
-            <PersonIcon fontSize="small" /> Name
-          </ToggleButton>
-          <ToggleButton value="phone" sx={{ color: theme.palette.grey[100], gap: 0.5 }}>
-            <PhoneIcon fontSize="small" /> Phone
-          </ToggleButton>
-          <ToggleButton value="unit"  sx={{ color: theme.palette.grey[100], gap: 0.5 }}>
-            <UnitIcon fontSize="small" /> Unit
-          </ToggleButton>
-        </ToggleButtonGroup>
+          <PaymentsIcon sx={{ color: accentGreen, fontSize: 24 }} />
+        </Box>
+        <Box>
+          <Typography variant="h5" sx={{ fontWeight: 700, color: textPrimary, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+            Record Payment
+          </Typography>
+          <Typography variant="caption" sx={{ color: textSecondary }}>
+            Search for a tenant, then enter payment details
+          </Typography>
+        </Box>
+      </Box>
 
-        {/* ── Search Input ───────────────────────────────────────────── */}
-        {searchMode === "name" ? (
-          <Autocomplete
-            freeSolo
-            options={searchResults}
-            getOptionLabel={(option) =>
-              typeof option === "string"
-                ? option
-                : `${option.firstName || "Unknown"} ${option.lastName || ""} (${option.phoneNumber || "N/A"})`
-            }
-            onChange={handleCustomerSelect}
-            onInputChange={handleInputChange}
-            loading={isSearching}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Search by Name"
-                variant="outlined"
-                InputProps={{
-                  ...params.InputProps,
-                  startAdornment: <InputAdornment position="start"><PersonIcon fontSize="small" /></InputAdornment>,
-                  endAdornment: isSearching ? <CircularProgress size={20} /> : params.InputProps.endAdornment,
-                }}
-                sx={inputSx}
+      <Box sx={{ display: "flex", gap: 2.5, flexWrap: "wrap", alignItems: "flex-start" }}>
+
+        {/* ── Left card: Customer search ───────────────────────────── */}
+        <Paper
+          elevation={0}
+          sx={{
+            flex: "1 1 340px", maxWidth: 480,
+            borderRadius: 2, border: `1px solid ${borderColor}`, bgcolor: cardBg,
+            overflow: "hidden",
+          }}
+        >
+          {/* Card header */}
+          <Box sx={{ px: 2.5, py: 1.75, bgcolor: headerBg, borderBottom: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 1 }}>
+            <PersonIcon sx={{ color: accentGreen, fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: textPrimary }}>
+              Find Tenant
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Search mode toggle */}
+            <ToggleButtonGroup
+              value={searchMode}
+              exclusive
+              onChange={(_, val) => {
+                if (val) {
+                  setSearchMode(val);
+                  setSearchQuery("");
+                  setSearchResults([]);
+                  setSelectedCustomer(null);
+                }
+              }}
+              size="small"
+              sx={{
+                "& .MuiToggleButton-root": {
+                  borderColor, color: textSecondary, textTransform: "none",
+                  fontWeight: 600, fontSize: "0.8rem", gap: 0.5, borderRadius: "8px !important",
+                  "&.Mui-selected": {
+                    bgcolor: alpha(accentGreen, 0.12),
+                    color: accentGreen,
+                    borderColor: alpha(accentGreen, 0.3),
+                  },
+                  "&:hover": { bgcolor: alpha(accentGreen, 0.07) },
+                },
+              }}
+            >
+              <ToggleButton value="name"><PersonIcon fontSize="small" /> Name</ToggleButton>
+              <ToggleButton value="phone"><PhoneIcon fontSize="small" /> Phone</ToggleButton>
+              <ToggleButton value="unit"><UnitIcon fontSize="small" /> Unit</ToggleButton>
+            </ToggleButtonGroup>
+
+            {/* Search input */}
+            {searchMode === "name" ? (
+              <Autocomplete
+                freeSolo
+                options={searchResults}
+                getOptionLabel={(opt) =>
+                  typeof opt === "string"
+                    ? opt
+                    : `${opt.firstName || ""} ${opt.lastName || ""} (${opt.phoneNumber || "N/A"})`
+                }
+                onChange={handleCustomerSelect}
+                onInputChange={handleInputChange}
+                loading={isSearching}
+                renderOption={(props, opt) => (
+                  <Box component="li" {...props} sx={{ display: "flex", flexDirection: "column", alignItems: "flex-start", py: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: textPrimary }}>
+                      {opt.firstName} {opt.lastName}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: textSecondary }}>
+                      {opt.phoneNumber || "N/A"} &nbsp;·&nbsp; Unit {opt.unit?.unitNumber || "\u2014"} &nbsp;·&nbsp; {opt.unit?.building?.name || "\u2014"}
+                    </Typography>
+                  </Box>
+                )}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Search by name"
+                    size="small"
+                    InputProps={{
+                      ...params.InputProps,
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <PersonIcon sx={{ fontSize: 16, color: textSecondary }} />
+                        </InputAdornment>
+                      ),
+                      endAdornment: isSearching
+                        ? <CircularProgress size={16} sx={{ color: accentGreen }} />
+                        : params.InputProps.endAdornment,
+                    }}
+                    sx={fieldSx}
+                  />
+                )}
               />
-            )}
-          />
-        ) : (
-          <>
-            <TextField
-              label={searchMode === "phone" ? "Search by Phone" : "Search by Unit Number"}
-              variant="outlined"
-              value={searchQuery}
-              onChange={(e) => {
-                const v = e.target.value;
-                setSearchQuery(v);
-                setSelectedCustomer(null);
-                debouncedSearch(v, searchMode);
-              }}
-              fullWidth
-              disabled={isSearching}
-              inputProps={{ maxLength: searchMode === "phone" ? 15 : 20 }}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    {searchMode === "phone" ? <PhoneIcon fontSize="small" /> : <UnitIcon fontSize="small" />}
-                  </InputAdornment>
-                ),
-                endAdornment: isSearching ? <CircularProgress size={20} /> : null,
-              }}
-              sx={inputSx}
-            />
-            {renderListResults()}
-          </>
-        )}
+            ) : (
+              <Box>
+                <TextField
+                  label={searchMode === "phone" ? "Search by phone" : "Search by unit number"}
+                  variant="outlined"
+                  size="small"
+                  value={searchQuery}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setSelectedCustomer(null);
+                    debouncedSearch(e.target.value, searchMode);
+                  }}
+                  fullWidth
+                  disabled={isSearching}
+                  InputProps={{
+                    startAdornment: (
+                      <InputAdornment position="start">
+                        {searchMode === "phone"
+                          ? <PhoneIcon sx={{ fontSize: 16, color: textSecondary }} />
+                          : <UnitIcon  sx={{ fontSize: 16, color: textSecondary }} />}
+                      </InputAdornment>
+                    ),
+                    endAdornment: isSearching ? <CircularProgress size={16} sx={{ color: accentGreen }} /> : null,
+                  }}
+                  sx={fieldSx}
+                />
 
-        {selectedCustomer && (
-          <Box sx={{ mt: 3 }}>
-            <Typography variant="h6" gutterBottom sx={{ mb: 2, color: theme.palette.grey[100] }}>
+                {/* Search results list */}
+                {searchResults.length > 0 && (
+                  <Paper
+                    elevation={0}
+                    sx={{
+                      mt: 0.5, border: `1px solid ${borderColor}`, borderRadius: 1.5,
+                      bgcolor: cardBg, overflow: "hidden", maxHeight: 240, overflowY: "auto",
+                    }}
+                  >
+                    {searchResults.map((c, i) => (
+                      <Box
+                        key={c.id}
+                        onClick={() => handleCustomerSelect(null, c)}
+                        sx={{
+                          px: 2, py: 1.25, cursor: "pointer",
+                          borderBottom: i < searchResults.length - 1 ? `1px solid ${borderColor}` : "none",
+                          "&:hover": { bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.03) },
+                          transition: "background 0.12s ease",
+                        }}
+                      >
+                        <Typography variant="body2" sx={{ fontWeight: 600, color: textPrimary }}>
+                          {c.firstName} {c.lastName}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: textSecondary }}>
+                          {c.phoneNumber || "N/A"} &nbsp;·&nbsp; Unit {c.unit?.unitNumber || "\u2014"} &nbsp;·&nbsp; {c.unit?.building?.name || "\u2014"}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Paper>
+                )}
+              </Box>
+            )}
+
+            {/* Selected customer card */}
+            {selectedCustomer && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 1.75, borderRadius: 1.5,
+                  border: `1px solid ${alpha(accentGreen, 0.3)}`,
+                  bgcolor: alpha(accentGreen, 0.06),
+                  display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 1,
+                }}
+              >
+                <Box>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: textPrimary }}>
+                    {selectedCustomer.firstName} {selectedCustomer.lastName}
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: textSecondary, display: "block" }}>
+                    {selectedCustomer.phoneNumber || "N/A"}
+                  </Typography>
+                  {selectedCustomer.unit && (
+                    <Typography variant="caption" sx={{ color: textSecondary }}>
+                      Unit {selectedCustomer.unit.unitNumber} &nbsp;·&nbsp; {selectedCustomer.unit.building?.name || "\u2014"}
+                    </Typography>
+                  )}
+                </Box>
+                <Chip
+                  label="Selected"
+                  size="small"
+                  sx={{ bgcolor: alpha(accentGreen, 0.15), color: accentGreen, fontWeight: 700, fontSize: "0.68rem", height: 22 }}
+                />
+              </Paper>
+            )}
+          </Box>
+        </Paper>
+
+        {/* ── Right card: Payment details ──────────────────────────── */}
+        <Paper
+          elevation={0}
+          sx={{
+            flex: "1 1 300px", maxWidth: 440,
+            borderRadius: 2, border: `1px solid ${borderColor}`, bgcolor: cardBg,
+            overflow: "hidden",
+            opacity: selectedCustomer ? 1 : 0.55,
+            pointerEvents: selectedCustomer ? "auto" : "none",
+            transition: "opacity 0.2s ease",
+          }}
+        >
+          {/* Card header */}
+          <Box sx={{ px: 2.5, py: 1.75, bgcolor: headerBg, borderBottom: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 1 }}>
+            <WalletIcon sx={{ color: accentBlue, fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: textPrimary }}>
               Payment Details
             </Typography>
-            <Grid container spacing={2}>
-              <Grid item xs={12}>
-                <Typography variant="subtitle1" sx={{ color: theme.palette.grey[100] }}>
-                  Customer: {selectedCustomer.firstName} {selectedCustomer.lastName} ({selectedCustomer.phoneNumber})
-                </Typography>
-                {selectedCustomer.unit && (
-                  <Typography variant="caption" sx={{ color: theme.palette.grey[400] }}>
-                    Unit {selectedCustomer.unit.unitNumber} · {selectedCustomer.unit.building?.name || "—"}
-                  </Typography>
-                )}
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  label="Amount (KES)"
-                  variant="outlined"
-                  type="number"
-                  value={formData.totalAmount}
-                  onChange={handleFormChange("totalAmount")}
-                  fullWidth
-                  sx={{ "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: theme.palette.grey[300] }, "&:hover fieldset": { borderColor: theme.palette.greenAccent.main }, "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main } }, "& .MuiInputLabel-root": { color: theme.palette.grey[100] }, "& .MuiInputBase-input": { color: theme.palette.grey[100] } }}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  select
-                  label="Mode of Payment"
-                  variant="outlined"
-                  value={formData.modeOfPayment}
-                  onChange={handleFormChange("modeOfPayment")}
-                  fullWidth
-                  sx={{ "& .MuiOutlinedInput-root": { "& fieldset": { borderColor: theme.palette.grey[300] }, "&:hover fieldset": { borderColor: theme.palette.greenAccent.main }, "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main } }, "& .MuiInputLabel-root": { color: theme.palette.grey[100] }, "& .MuiInputBase-input": { color: theme.palette.grey[100] } }}
-                >
-                  {["CASH", "MPESA", "BANK_TRANSFER", "CREDIT_CARD", "DEBIT_CARD"].map((option) => (
-                    <MenuItem key={option} value={option} sx={{ color: theme.palette.grey[100] }}>{option}</MenuItem>
-                  ))}
-                </TextField>
-              </Grid>
-              <Grid item xs={12}>
-                <Button
-                  variant="contained"
-                  onClick={handlePaymentSubmit}
-                  disabled={isProcessing}
-                  fullWidth
-                  sx={{ bgcolor: theme.palette.greenAccent.main, color: "#fff", "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 }, "&:disabled": { bgcolor: theme.palette.grey[300] }, borderRadius: 20, py: 1.5 }}
-                >
-                  {isProcessing ? <CircularProgress size={24} sx={{ color: "#fff" }} /> : "Submit Payment"}
-                </Button>
-              </Grid>
-            </Grid>
+            {!selectedCustomer && (
+              <Typography variant="caption" sx={{ color: textSecondary, ml: "auto" }}>
+                Select a tenant first
+              </Typography>
+            )}
           </Box>
-        )}
 
-        <Snackbar
-          open={snackbar.open}
-          autoHideDuration={6000}
-          onClose={() => setSnackbar({ ...snackbar, open: false })}
-          anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
-        >
-          <Alert severity={snackbar.severity} sx={{ width: "100%", bgcolor: theme.palette.grey[300], color: theme.palette.grey[100] }}>
-            {snackbar.message}
-          </Alert>
-        </Snackbar>
-      </Paper>
+          <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Amount */}
+            <TextField
+              label="Amount (KES)"
+              variant="outlined"
+              size="small"
+              type="number"
+              value={formData.totalAmount}
+              onChange={handleFormChange("totalAmount")}
+              fullWidth
+              inputProps={{ min: 0 }}
+              sx={fieldSx}
+            />
+
+            {/* Mode of payment */}
+            <TextField
+              select
+              label="Mode of Payment"
+              variant="outlined"
+              size="small"
+              value={formData.modeOfPayment}
+              onChange={handleFormChange("modeOfPayment")}
+              fullWidth
+              sx={fieldSx}
+            >
+              {PAYMENT_MODES.map((m) => (
+                <MenuItem key={m} value={m}>
+                  <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                    <Box sx={{ width: 8, height: 8, borderRadius: "50%", bgcolor: modeColor(m) }} />
+                    <Typography variant="body2" sx={{ color: textPrimary }}>{m.replace("_", " ")}</Typography>
+                  </Box>
+                </MenuItem>
+              ))}
+            </TextField>
+
+            <Divider sx={{ borderColor }} />
+
+            {/* Summary preview */}
+            {formData.totalAmount && formData.modeOfPayment && selectedCustomer && (
+              <Box
+                sx={{
+                  p: 1.5, borderRadius: 1.5,
+                  border: `1px solid ${borderColor}`,
+                  bgcolor: isDark ? alpha("#fff", 0.03) : alpha("#000", 0.02),
+                  display: "flex", flexDirection: "column", gap: 0.5,
+                }}
+              >
+                <Typography variant="caption" sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Summary
+                </Typography>
+                <Box sx={{ display: "flex", justifyContent: "space-between", mt: 0.5 }}>
+                  <Typography variant="body2" sx={{ color: textSecondary }}>Tenant</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 600, color: textPrimary }}>
+                    {selectedCustomer.firstName} {selectedCustomer.lastName}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" sx={{ color: textSecondary }}>Amount</Typography>
+                  <Typography variant="body2" sx={{ fontWeight: 700, color: accentGreen }}>
+                    KES {Number(formData.totalAmount).toLocaleString()}
+                  </Typography>
+                </Box>
+                <Box sx={{ display: "flex", justifyContent: "space-between" }}>
+                  <Typography variant="body2" sx={{ color: textSecondary }}>Mode</Typography>
+                  <Chip
+                    label={formData.modeOfPayment.replace("_", " ")}
+                    size="small"
+                    sx={{
+                      height: 20, fontSize: "0.68rem", fontWeight: 700,
+                      bgcolor: alpha(modeColor(formData.modeOfPayment), 0.12),
+                      color: modeColor(formData.modeOfPayment),
+                      border: `1px solid ${modeColor(formData.modeOfPayment)}`,
+                    }}
+                  />
+                </Box>
+              </Box>
+            )}
+
+            {/* Submit */}
+            <Button
+              variant="contained"
+              onClick={handlePaymentSubmit}
+              disabled={isProcessing || submitted || !selectedCustomer || !formData.totalAmount || !formData.modeOfPayment}
+              fullWidth
+              startIcon={submitted ? <CheckCircleIcon /> : isProcessing ? null : <PaymentsIcon />}
+              sx={{
+                mt: 0.5,
+                bgcolor: submitted ? alpha("#4caf50", 0.15) : accentGreen,
+                color: submitted ? "#4caf50" : "#fff",
+                border: submitted ? "1px solid #4caf50" : "none",
+                textTransform: "none", fontWeight: 700, borderRadius: 1.5, py: 1.2,
+                boxShadow: submitted ? "none" : `0 2px 12px ${alpha(accentGreen, 0.35)}`,
+                "&:hover": {
+                  bgcolor: submitted ? alpha("#4caf50", 0.2) : (theme.palette.greenAccent.dark || accentGreen),
+                  boxShadow: submitted ? "none" : `0 4px 18px ${alpha(accentGreen, 0.45)}`,
+                },
+                "&:disabled": {
+                  bgcolor: isDark ? alpha("#fff", 0.06) : alpha("#000", 0.06),
+                  color: textSecondary,
+                  boxShadow: "none",
+                },
+                transition: "all 0.2s ease",
+              }}
+            >
+              {isProcessing
+                ? <CircularProgress size={20} sx={{ color: "#fff" }} />
+                : submitted
+                ? "Payment Recorded"
+                : "Submit Payment"}
+            </Button>
+
+            {submitted && (
+              <Button
+                variant="text"
+                onClick={resetSearch}
+                size="small"
+                sx={{ color: textSecondary, textTransform: "none", fontSize: "0.8rem", "&:hover": { color: accentGreen } }}
+              >
+                Record another payment
+              </Button>
+            )}
+          </Box>
+        </Paper>
+      </Box>
+
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={6000}
+        onClose={() => setSnackbar((p) => ({ ...p, open: false }))}
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert severity={snackbar.severity} sx={{ width: "100%" }} onClose={() => setSnackbar((p) => ({ ...p, open: false }))}>
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

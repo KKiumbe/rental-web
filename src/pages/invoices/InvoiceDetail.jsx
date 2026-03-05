@@ -22,6 +22,7 @@ import {
   Box,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import PrintIcon from "@mui/icons-material/Print";
 import axios from "axios";
 import TitleComponent from "../../components/title";
 import { useAuthStore } from "../../store/authStore";
@@ -132,6 +133,39 @@ const InvoiceDetails = () => {
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
   }, [id,BASEURL]);
+
+  const handlePrintInvoice = useCallback(async () => {
+    setSnackbarMessage("Preparing invoice for printing...");
+    setSnackbarSeverity("info");
+    setSnackbarOpen(true);
+    try {
+      const response = await axios.get(`${BASEURL}/download-invoice/${id}`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.addEventListener("load", () => {
+          printWindow.focus();
+          printWindow.print();
+        });
+      } else {
+        // Fallback: if popup blocked, open in same tab as object
+        setSnackbarMessage("Popup blocked. Please allow popups and try again.");
+        setSnackbarSeverity("warning");
+      }
+      // Clean up the object URL after a delay to ensure print dialog loads
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      console.error("Error printing invoice:", err);
+      setSnackbarMessage(err.response?.data?.message || "Failed to prepare invoice for printing.");
+      setSnackbarSeverity("error");
+    } finally {
+      setTimeout(() => setSnackbarOpen(false), 4000);
+    }
+  }, [id, BASEURL]);
 
   const handleCancelInvoice = useCallback(async () => {
     setCancelLoading(true);
@@ -390,6 +424,18 @@ const InvoiceDetails = () => {
               disabled={downloadLoading}
             >
               {downloadLoading ? "Downloading..." : "Download PDF"}
+            </Button>
+            <Button
+              variant="contained"
+              startIcon={<PrintIcon />}
+              sx={{
+                bgcolor: theme.palette.blueAccent?.main || "#1976d2",
+                color: "#fff",
+                "&:hover": { opacity: 0.9 },
+              }}
+              onClick={handlePrintInvoice}
+            >
+              Print
             </Button>
             <Button
               variant="contained"

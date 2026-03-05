@@ -2,36 +2,44 @@ import { useEffect, useState } from "react";
 import {
   Paper,
   Typography,
-  Grid,
   Box,
   Button,
   IconButton,
   TextField,
   CircularProgress,
+  Chip,
+  Divider,
+  InputAdornment,
+  Tooltip,
+  alpha,
 } from "@mui/material";
 import { DataGrid } from "@mui/x-data-grid";
 import { useNavigate, Link } from "react-router-dom";
 import axios from "axios";
 import { useAuthStore } from "../../store/authStore";
-import CloseIcon from "@mui/icons-material/Close";
 import VisibilityIcon from "@mui/icons-material/Visibility";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
-import TitleComponent from "../../components/title";
+import PrintIcon from "@mui/icons-material/Print";
+import DownloadIcon from "@mui/icons-material/Download";
+import SearchIcon from "@mui/icons-material/Search";
+import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
+import AddIcon from "@mui/icons-material/Add";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { getTheme } from "../../store/theme";
 
 export default function InvoiceList() {
   const [invoices, setInvoices] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [selectedCustomer, setSelectedCustomer] = useState(null);
-  const [showDetails, setShowDetails] = useState(false);
   const [rowCount, setRowCount] = useState(0);
   const [paginationModel, setPaginationModel] = useState({
-    page: 0, // 0-based index (Page 1)
+    page: 0,
     pageSize: 10,
   });
   const [pageInput, setPageInput] = useState("");
   const [searchQuery, setSearchQuery] = useState("");
   const [errorMessage, setErrorMessage] = useState("");
+  const [printingId, setPrintingId] = useState(null);
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -140,6 +148,7 @@ export default function InvoiceList() {
     if (!searchQuery) {
       fetchAllInvoices(paginationModel.page, paginationModel.pageSize);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentUser, navigate, paginationModel, searchQuery]);
 
   // Sanitized rows for DataGrid
@@ -147,68 +156,206 @@ export default function InvoiceList() {
     id: invoice.id || Math.random().toString(),
     invoiceNumber: invoice.invoiceNumber,
     invoiceAmount: invoice.invoiceAmount,
-    amountPaid: invoice.amountPaid || 0, // New field
+    amountPaid: invoice.amountPaid || 0,
     closingBalance: invoice.closingBalance,
     invoicePeriod: invoice.invoicePeriod,
     status: invoice.status,
     isSystemGenerated: invoice.isSystemGenerated,
-    createdBy: invoice.createdBy || "N/A", // New field
+    createdBy: invoice.createdBy || "N/A",
     customerId: invoice.customer?.id || "N/A",
     firstName: invoice.customer?.firstName?.trim() || "Unknown",
     lastName: invoice.customer?.lastName?.trim() || "Unknown",
     phoneNumber: invoice.customer?.phoneNumber?.trim() || "N/A",
-    unitNumber: invoice.unit?.unitNumber || "N/A", // New relation
+    unitNumber: invoice.unit?.unitNumber || "N/A",
     itemDescriptions: invoice.items?.length
       ? invoice.items.map((item) => `${item.description} (Qty: ${item.quantity}, Amount: ${item.amount})`).join(", ")
       : "N/A",
     paymentSummary: invoice.payments?.length
       ? invoice.payments.map((p) => `${p.amount} (${p.modeOfPayment})`).join(", ")
-      : "No Payments", // New relation
+      : "No Payments",
     createdAt: invoice.createdAt,
   }));
+
+  const statusChipStyles = (status) => {
+    const s = (status || "").toLowerCase();
+    if (s === "paid") return { bg: alpha("#4caf50", 0.15), color: "#4caf50", border: "#4caf50" };
+    if (s === "partial") return { bg: alpha("#ff9800", 0.15), color: "#ff9800", border: "#ff9800" };
+    if (s === "overdue") return { bg: alpha("#f44336", 0.15), color: "#f44336", border: "#f44336" };
+    return { bg: alpha("#90a4ae", 0.15), color: "#90a4ae", border: "#90a4ae" };
+  };
 
   const columns = [
     {
       field: "actions",
-      headerName: "View",
-      width: 100,
+      headerName: "Actions",
+      width: 130,
+      sortable: false,
+      filterable: false,
       renderCell: (params) => (
-        <IconButton
-          component={Link}
-          to={`/get-invoice/${params.row.id}`}
-          sx={{ color: theme.palette.greenAccent.main }}
-        >
-          <VisibilityIcon />
-        </IconButton>
+        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", height: "100%" }}>
+          <Tooltip title="View Invoice">
+            <IconButton
+              component={Link}
+              to={`/get-invoice/${params.row.id}`}
+              size="small"
+              sx={{
+                color: theme.palette.greenAccent.main,
+                "&:hover": { bgcolor: alpha(theme.palette.greenAccent.main, 0.1) },
+              }}
+            >
+              <VisibilityIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          <Tooltip title="Print Invoice">
+            <span>
+              <IconButton
+                onClick={(e) => { e.stopPropagation(); handlePrintInvoice(params.row.id); }}
+                disabled={printingId === params.row.id}
+                size="small"
+                sx={{
+                  color: theme.palette.blueAccent?.main || "#1976d2",
+                  "&:hover": { bgcolor: alpha(theme.palette.blueAccent?.main || "#1976d2", 0.1) },
+                }}
+              >
+                {printingId === params.row.id
+                  ? <CircularProgress size={16} sx={{ color: "inherit" }} />
+                  : <PrintIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip title="Download Invoice">
+            <span>
+              <IconButton
+                onClick={(e) => { e.stopPropagation(); handleDownloadInvoice(params.row.id); }}
+                disabled={downloadingId === params.row.id}
+                size="small"
+                sx={{
+                  color: theme.palette.blueAccent?.main || "#1976d2",
+                  "&:hover": { bgcolor: alpha(theme.palette.blueAccent?.main || "#1976d2", 0.1) },
+                }}
+              >
+                {downloadingId === params.row.id
+                  ? <CircularProgress size={16} sx={{ color: "inherit" }} />
+                  : <DownloadIcon fontSize="small" />}
+              </IconButton>
+            </span>
+          </Tooltip>
+        </Box>
       ),
     },
-    { field: "invoiceNumber", headerName: "Invoice #", width: 150 },
-    { field: "firstName", headerName: "First Name", width: 150 },
-    { field: "lastName", headerName: "Last Name", width: 150 },
-    { field: "phoneNumber", headerName: "Phone Number", width: 180 },
-    { field: "invoiceAmount", headerName: "Invoice Amount", width: 150 },
-    { field: "amountPaid", headerName: "Amount Paid", width: 150 }, // New column
-    { field: "closingBalance", headerName: "Closing Balance", width: 150 },
-    { field: "unitNumber", headerName: "Unit", width: 120 }, // New column
-    { field: "createdBy", headerName: "Created By", width: 150 }, // New column
+    {
+      field: "invoiceNumber",
+      headerName: "Invoice #",
+      width: 160,
+      renderCell: (params) => (
+        <Typography
+          variant="body2"
+          sx={{ fontWeight: 600, color: theme.palette.greenAccent.main, fontFamily: "monospace" }}
+        >
+          {params.value}
+        </Typography>
+      ),
+    },
+    {
+      field: "firstName",
+      headerName: "Tenant",
+      width: 200,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5, lineHeight: 1 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 600, color: theme.palette.text.primary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
+            {params.row.firstName} {params.row.lastName}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{ color: theme.palette.text.secondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
+            {params.row.phoneNumber}
+          </Typography>
+        </Box>
+      ),
+    },
+    { field: "unitNumber", headerName: "Unit", width: 100 },
+    {
+      field: "invoiceAmount",
+      headerName: "Invoice Amt",
+      width: 140,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 600 }}>
+          {Number(params.value || 0).toLocaleString()}
+        </Typography>
+      ),
+    },
+    {
+      field: "amountPaid",
+      headerName: "Paid",
+      width: 130,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ color: "#4caf50", fontWeight: 600 }}>
+          {Number(params.value || 0).toLocaleString()}
+        </Typography>
+      ),
+    },
+    {
+      field: "closingBalance",
+      headerName: "Balance",
+      width: 130,
+      renderCell: (params) => {
+        const bal = Number(params.value || 0);
+        return (
+          <Typography variant="body2" sx={{ color: bal > 0 ? "#f44336" : "#4caf50", fontWeight: 600 }}>
+            {bal.toLocaleString()}
+          </Typography>
+        );
+      },
+    },
+    {
+      field: "status",
+      headerName: "Status",
+      width: 120,
+      renderCell: (params) => {
+        const styles = statusChipStyles(params.value);
+        return (
+          <Chip
+            label={(params.value || "Unknown").toUpperCase()}
+            size="small"
+            sx={{
+              bgcolor: styles.bg,
+              color: styles.color,
+              border: `1px solid ${styles.border}`,
+              fontWeight: 700,
+              fontSize: "0.68rem",
+              letterSpacing: "0.04em",
+            }}
+          />
+        );
+      },
+    },
     {
       field: "createdAt",
-      headerName: "Date",
-      width: 200,
+      headerName: "Date Created",
+      width: 170,
       renderCell: (params) => {
         if (!params?.value) return "N/A";
         try {
           const date = new Date(params.value);
-          date.setHours(date.getHours() - 1); // Subtract 1 hour to correct time
-          const day = String(date.getDate()).padStart(2, "0");
-          const month = date.toLocaleString("default", { month: "short" });
-          const year = date.getFullYear();
-          const hours = String(date.getHours()).padStart(2, "0");
-          const minutes = String(date.getMinutes()).padStart(2, "0");
-          const seconds = String(date.getSeconds()).padStart(2, "0");
-          return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
-        } catch (error) {
-          console.error("Invalid Date:", params.value);
+          date.setHours(date.getHours() - 1);
+          return (
+            <Box>
+              <Typography variant="body2">
+                {String(date.getDate()).padStart(2, "0")}{" "}
+                {date.toLocaleString("default", { month: "short" })}{" "}
+                {date.getFullYear()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: theme.palette.text.secondary }}>
+                {String(date.getHours()).padStart(2, "0")}:
+                {String(date.getMinutes()).padStart(2, "0")}
+              </Typography>
+            </Box>
+          );
+        } catch {
           return "Invalid Date";
         }
       },
@@ -216,30 +363,82 @@ export default function InvoiceList() {
     {
       field: "invoicePeriod",
       headerName: "Period",
-      width: 150,
+      width: 120,
       renderCell: (params) =>
         params.value
           ? new Date(params.value).toLocaleString("default", { year: "numeric", month: "short" })
           : "N/A",
     },
-    { field: "status", headerName: "Status", width: 120 },
-    { field: "isSystemGenerated", headerName: "System Generated", width: 180, renderCell: (params) => (params.value ? "Yes" : "No") },
+    {
+      field: "isSystemGenerated",
+      headerName: "Source",
+      width: 120,
+      renderCell: (params) => (
+        <Chip
+          label={params.value ? "Auto" : "Manual"}
+          size="small"
+          variant="outlined"
+          sx={{
+            fontSize: "0.68rem",
+            fontWeight: 600,
+            color: params.value ? theme.palette.blueAccent?.main : theme.palette.text.secondary,
+            borderColor: params.value ? theme.palette.blueAccent?.main : theme.palette.divider,
+          }}
+        />
+      ),
+    },
+    { field: "createdBy", headerName: "Created By", width: 150 },
     { field: "itemDescriptions", headerName: "Items", width: 300 },
-    { field: "paymentSummary", headerName: "Payments", width: 250 }, // New column
+    { field: "paymentSummary", headerName: "Payments", width: 250 },
   ];
 
-  const handleRowClick = (params) => {
-    setSelectedCustomer(params.row);
-    setShowDetails(true);
+  const handlePrintInvoice = async (invoiceId) => {
+    setPrintingId(invoiceId);
+    try {
+      const response = await axios.get(`${BASEURL}/download-invoice/${invoiceId}`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.addEventListener("load", () => {
+          printWindow.focus();
+          printWindow.print();
+        });
+      } else {
+        setErrorMessage("Print window was blocked. Please allow popups for this site.");
+      }
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setErrorMessage(err.response?.data?.message || "Failed to print invoice");
+    } finally {
+      setPrintingId(null);
+    }
   };
 
-  const handleCloseDetails = () => {
-    setShowDetails(false);
-    setSelectedCustomer(null);
-  };
-
-  const handleBack = () => {
-    navigate(-1);
+  const handleDownloadInvoice = async (invoiceId) => {
+    setDownloadingId(invoiceId);
+    try {
+      const response = await axios.get(`${BASEURL}/download-invoice/${invoiceId}`, {
+        withCredentials: true,
+        responseType: "blob",
+      });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `invoice-${invoiceId}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setErrorMessage(err.response?.data?.message || "Failed to download invoice");
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const handlePageInputChange = (e) => {
@@ -270,223 +469,406 @@ export default function InvoiceList() {
 
   const totalPages = Math.ceil(rowCount / paginationModel.pageSize);
   const currentPage = paginationModel.page + 1;
+  const isDark = theme.palette.mode === "dark";
+  const surfaceBg = isDark ? "#141824" : "#f4f6fb";
+  const cardBg = isDark ? "#1c2030" : "#ffffff";
+  const borderColor = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const headerBg = isDark ? "#181d2e" : "#f0f3f9";
+  const textPrimary = theme.palette.text.primary;
+  const textSecondary = theme.palette.text.secondary;
+  const accentGreen = theme.palette.greenAccent.main;
+  const accentBlue = theme.palette.blueAccent?.main || "#1976d2";
 
   return (
-    <Box sx={{ p: 3, bgcolor: theme.palette.primary.main, height: "100vh" }}>
-      <IconButton
-        onClick={handleBack}
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: surfaceBg,
+        p: { xs: 2, md: 3 },
+        display: "flex",
+        flexDirection: "column",
+        gap: 2.5,
+      }}
+    >
+      {/* ── Page Header ── */}
+      <Box
         sx={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          color: theme.palette.greenAccent.main,
-          "&:hover": { bgcolor: theme.palette.greenAccent.main + "20" },
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 2,
         }}
       >
-        <ArrowBackIcon sx={{ fontSize: 40 }} />
-      </IconButton>
-
-      <Grid item xs={showDetails ? 6 : 12}>
-        <Paper
-          sx={{
-            width: "100%",
-            height: "100%",
-            padding: 2,
-            bgcolor: theme.palette.primary.main,
-            overflow: "hidden",
-          }}
-        >
-          <Typography component="div" sx={{ padding: 3, ml: 5 }}>
-            <TitleComponent title="Invoices" />
-          </Typography>
-
-          <Box sx={{ display: "flex", gap: 2, marginBottom: 2, ml: 10 }}>
-            <TextField
-              label="Search by Name or Phone Number"
-              variant="outlined"
-              size="small"
-              value={searchQuery}
-              onChange={handleSearchChange}
-              onKeyPress={handleKeyPress}
-              sx={{
-                width: "400px",
-                "& .MuiOutlinedInput-root": {
-                  "& fieldset": { borderColor: theme.palette.grey[300] },
-                  "&:hover fieldset": { borderColor: theme.palette.greenAccent.main },
-                  "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main },
-                },
-                "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-                "& .MuiInputBase-input": { color: theme.palette.grey[100] },
-              }}
-            />
-            <Button
-              variant="contained"
-              onClick={handleSearch}
-              sx={{
-                bgcolor: theme.palette.greenAccent.main,
-                color: "#fff",
-                "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 },
-              }}
-            >
-              Search
-            </Button>
-            <TextField
-              label="Go to Page"
-              variant="outlined"
-              size="small"
-              value={pageInput}
-              onChange={handlePageInputChange}
-              sx={{
-                width: "100px",
-                "& .MuiOutlinedInput-root": {
-                  "& fieldset": { borderColor: theme.palette.grey[300] },
-                  "&:hover fieldset": { borderColor: theme.palette.greenAccent.main },
-                  "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main },
-                  fontSize: "0.9rem",
-                },
-                "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-                "& .MuiInputBase-input": { color: theme.palette.grey[100] },
-              }}
-            />
-            <Button
-              onClick={handlePageInputSubmit}
-              variant="contained"
-              sx={{
-                bgcolor: theme.palette.greenAccent.main,
-                color: "#fff",
-                "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 },
-              }}
-            >
-              Go
-            </Button>
-          </Box>
-
-          {loading ? (
-            <Box
-              sx={{
-                display: "flex",
-                justifyContent: "center",
-                alignItems: "center",
-                height: "50vh",
-                ml: 50,
-              }}
-            >
-              <CircularProgress size={70} sx={{ color: theme.palette.greenAccent.main, p: 2 }} />
-            </Box>
-          ) : errorMessage ? (
-            <Typography sx={{ color: theme.palette.error.main, textAlign: "center", mt: 2 }}>
-              {errorMessage}
-            </Typography>
-          ) : (
-            <Box sx={{ height: "70%", width: "100%", ml: 10, display: "flex", flexDirection: "column" }}>
-              <DataGrid
-                rows={sanitizedRows}
-                columns={columns}
-                getRowId={(row) => row.id}
-                paginationMode="server"
-                rowCount={rowCount}
-                paginationModel={paginationModel}
-                onPaginationModelChange={setPaginationModel}
-                pageSizeOptions={[10, 20, 50]}
-                checkboxSelection
-                disableRowSelectionOnClick
-                sx={{
-                  minWidth: 1200,
-                  maxWidth: 1600,
-                  color: theme.palette.grey[100],
-                  "& .MuiDataGrid-columnHeaders": { bgcolor: theme.palette.grey[300] },
-                  "& .MuiDataGrid-footerContainer": {
-                    bgcolor: theme.palette.primary.main,
-                    color: theme.palette.grey[100],
-                    borderTop: `1px solid ${theme.palette.grey[300]}`,
-                  },
-                  "& .MuiPaginationItem-root": {
-                    color: theme.palette.grey[100],
-                    "&.Mui-selected": { bgcolor: theme.palette.greenAccent.main, color: "#fff" },
-                    "&:hover": { bgcolor: theme.palette.greenAccent.main + "20" },
-                  },
-                  flex: 1,
-                }}
-                onRowClick={handleRowClick}
-              />
-              <Typography
-                sx={{
-                  color: theme.palette.greenAccent.main,
-                  textAlign: "center",
-                  py: 2,
-                  bgcolor: theme.palette.primary.main,
-                  mr: 95,
-                  paddingBottom: 5,
-                  fontSize: 20,
-                }}
-              >
-                Page {currentPage} of {totalPages}
-              </Typography>
-            </Box>
-          )}
-        </Paper>
-      </Grid>
-
-      {showDetails && (
-        <Grid item xs={6}>
-          <Paper
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box
             sx={{
-              width: "100%",
-              height: "100%",
-              overflow: "auto",
-              padding: 2,
-              bgcolor: theme.palette.primary.main,
+              width: 46,
+              height: 46,
+              borderRadius: 2,
+              bgcolor: alpha(accentGreen, 0.12),
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              border: `1px solid ${alpha(accentGreen, 0.2)}`,
             }}
           >
-            <Box display="flex" justifyContent="space-between" alignItems="center">
-              <IconButton onClick={handleCloseDetails}>
-                <CloseIcon sx={{ color: theme.palette.grey[100] }} />
-              </IconButton>
-              <Typography variant="h5" sx={{ color: theme.palette.grey[100] }}>
-                Customer Details
-              </Typography>
-            </Box>
+            <ReceiptLongIcon sx={{ color: accentGreen, fontSize: 24 }} />
+          </Box>
+          <Box>
+            <Typography
+              variant="h5"
+              sx={{ fontWeight: 700, color: textPrimary, lineHeight: 1.2, letterSpacing: "-0.01em" }}
+            >
+              Invoices
+            </Typography>
+            <Typography variant="caption" sx={{ color: textSecondary }}>
+              {rowCount.toLocaleString()} total records
+            </Typography>
+          </Box>
+        </Box>
 
-            {selectedCustomer ? (
-              <Box>
-                <Typography variant="h6" sx={{ color: theme.palette.grey[100] }}>
-                  Name: {selectedCustomer.firstName} {selectedCustomer.lastName}
-                </Typography>
-                <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
-                  Phone: {selectedCustomer.phoneNumber}
-                </Typography>
-                <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
-                  Unit: {selectedCustomer.unitNumber}
-                </Typography>
-                <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
-                  Invoices:
-                </Typography>
-                <ul>
-                  {invoices
-                    .filter((invoice) => invoice.customerId === selectedCustomer.customerId)
-                    .map((inv) => (
-                      <li key={inv.id}>
-                        <IconButton
-                          component={Link}
-                          to={`/get-invoice/${inv.id}`}
-                          sx={{ color: theme.palette.greenAccent.main }}
-                        >
-                          <VisibilityIcon />
-                        </IconButton>
-                        Invoice #{inv.invoiceNumber.substring(0, 9)} - Amount: ${inv.invoiceAmount} - Paid: ${inv.amountPaid} - Date:{" "}
-                        {new Date(inv.createdAt).toLocaleDateString()}
-                      </li>
-                    ))}
-                </ul>
-              </Box>
-            ) : (
-              <Typography variant="body1" sx={{ color: theme.palette.grey[100] }}>
-                Click a customer to view details
-              </Typography>
-            )}
+        <Box sx={{ display: "flex", gap: 1.5, alignItems: "center" }}>
+          <Button
+            variant="outlined"
+            startIcon={<FilterListIcon />}
+            size="small"
+            sx={{
+              borderColor,
+              color: textSecondary,
+              textTransform: "none",
+              fontWeight: 500,
+              borderRadius: 1.5,
+              "&:hover": { borderColor: accentGreen, color: accentGreen, bgcolor: alpha(accentGreen, 0.06) },
+            }}
+          >
+            Filter
+          </Button>
+          <Button
+            component={Link}
+            to="/create-invoice"
+            variant="contained"
+            startIcon={<AddIcon />}
+            size="small"
+            sx={{
+              bgcolor: accentGreen,
+              color: "#fff",
+              textTransform: "none",
+              fontWeight: 600,
+              borderRadius: 1.5,
+              px: 2,
+              boxShadow: `0 2px 10px ${alpha(accentGreen, 0.35)}`,
+              "&:hover": {
+                bgcolor: theme.palette.greenAccent.dark || accentGreen,
+                boxShadow: `0 4px 18px ${alpha(accentGreen, 0.45)}`,
+              },
+            }}
+          >
+            New Invoice
+          </Button>
+        </Box>
+      </Box>
+
+      {/* ── Summary Stats ── */}
+      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+        {[
+          { label: "Total Invoices", value: rowCount.toLocaleString(), color: accentBlue, bg: alpha(accentBlue, 0.1) },
+          { label: "Page", value: `${currentPage} / ${totalPages || 1}`, color: accentGreen, bg: alpha(accentGreen, 0.1) },
+        ].map((stat) => (
+          <Paper
+            key={stat.label}
+            elevation={0}
+            sx={{
+              px: 2.5,
+              py: 1.5,
+              borderRadius: 2,
+              border: `1px solid ${borderColor}`,
+              bgcolor: cardBg,
+              minWidth: 150,
+              display: "flex",
+              flexDirection: "column",
+              gap: 0.25,
+            }}
+          >
+            <Typography
+              variant="caption"
+              sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}
+            >
+              {stat.label}
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: stat.color, lineHeight: 1.3 }}>
+              {stat.value}
+            </Typography>
           </Paper>
-        </Grid>
-      )}
+        ))}
+      </Box>
+
+      {/* ── Search & Navigation Controls ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, md: 2 },
+          borderRadius: 2,
+          border: `1px solid ${borderColor}`,
+          bgcolor: cardBg,
+          display: "flex",
+          alignItems: "center",
+          gap: 1.5,
+          flexWrap: "wrap",
+        }}
+      >
+        <TextField
+          placeholder="Search by name or phone number…"
+          variant="outlined"
+          size="small"
+          value={searchQuery}
+          onChange={handleSearchChange}
+          onKeyPress={handleKeyPress}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: textSecondary, fontSize: 18 }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            flex: "1 1 280px",
+            maxWidth: 420,
+            "& .MuiOutlinedInput-root": {
+              borderRadius: 1.5,
+              bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.02),
+              "& fieldset": { borderColor },
+              "&:hover fieldset": { borderColor: accentGreen },
+              "&.Mui-focused fieldset": { borderColor: accentGreen, borderWidth: 1.5 },
+            },
+            "& .MuiInputBase-input": { color: textPrimary, fontSize: "0.875rem" },
+          }}
+        />
+        <Button
+          variant="contained"
+          onClick={handleSearch}
+          size="small"
+          sx={{
+            bgcolor: accentGreen,
+            color: "#fff",
+            textTransform: "none",
+            fontWeight: 600,
+            borderRadius: 1.5,
+            px: 2.5,
+            boxShadow: "none",
+            "&:hover": { bgcolor: theme.palette.greenAccent.dark || accentGreen, boxShadow: "none" },
+          }}
+        >
+          Search
+        </Button>
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor }} />
+
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <Typography variant="body2" sx={{ color: textSecondary, whiteSpace: "nowrap", fontSize: "0.8rem" }}>
+            Go to page
+          </Typography>
+          <TextField
+            variant="outlined"
+            size="small"
+            value={pageInput}
+            onChange={handlePageInputChange}
+            sx={{
+              width: 68,
+              "& .MuiOutlinedInput-root": {
+                borderRadius: 1.5,
+                "& fieldset": { borderColor },
+                "&:hover fieldset": { borderColor: accentGreen },
+                "&.Mui-focused fieldset": { borderColor: accentGreen },
+              },
+              "& .MuiInputBase-input": { color: textPrimary, textAlign: "center", fontSize: "0.875rem" },
+            }}
+          />
+          <Button
+            onClick={handlePageInputSubmit}
+            variant="outlined"
+            size="small"
+            sx={{
+              borderColor,
+              color: textPrimary,
+              textTransform: "none",
+              fontWeight: 500,
+              borderRadius: 1.5,
+              "&:hover": { borderColor: accentGreen, color: accentGreen, bgcolor: alpha(accentGreen, 0.06) },
+            }}
+          >
+            Go
+          </Button>
+        </Box>
+      </Paper>
+
+      {/* ── Data Table ── */}
+      <Paper
+        elevation={0}
+        sx={{
+          flex: 1,
+          borderRadius: 2,
+          border: `1px solid ${borderColor}`,
+          bgcolor: cardBg,
+          overflow: "hidden",
+          display: "flex",
+          flexDirection: "column",
+          minHeight: 520,
+        }}
+      >
+        {/* Table title bar */}
+        <Box
+          sx={{
+            px: 2.5,
+            py: 1.5,
+            bgcolor: headerBg,
+            borderBottom: `1px solid ${borderColor}`,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <Typography
+            variant="subtitle2"
+            sx={{ fontWeight: 700, color: textPrimary, letterSpacing: "0.02em" }}
+          >
+            Invoice Records
+          </Typography>
+          {!loading && (
+            <Chip
+              label={`${rowCount.toLocaleString()} invoices`}
+              size="small"
+              sx={{
+                bgcolor: alpha(accentGreen, 0.12),
+                color: accentGreen,
+                fontWeight: 600,
+                fontSize: "0.7rem",
+                height: 22,
+              }}
+            />
+          )}
+        </Box>
+
+        {loading ? (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              flex: 1,
+              gap: 2,
+              py: 10,
+            }}
+          >
+            <CircularProgress size={44} thickness={4} sx={{ color: accentGreen }} />
+            <Typography variant="body2" sx={{ color: textSecondary }}>
+              Loading invoices…
+            </Typography>
+          </Box>
+        ) : errorMessage ? (
+          <Box
+            sx={{
+              display: "flex",
+              flexDirection: "column",
+              alignItems: "center",
+              justifyContent: "center",
+              flex: 1,
+              gap: 1.5,
+              py: 10,
+            }}
+          >
+            <ErrorOutlineIcon sx={{ color: "#f44336", fontSize: 48 }} />
+            <Typography variant="body1" sx={{ color: "#f44336", fontWeight: 600 }}>
+              {errorMessage}
+            </Typography>
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => fetchAllInvoices(paginationModel.page, paginationModel.pageSize)}
+              sx={{
+                borderColor: accentGreen,
+                color: accentGreen,
+                textTransform: "none",
+                mt: 1,
+                borderRadius: 1.5,
+                "&:hover": { bgcolor: alpha(accentGreen, 0.08) },
+              }}
+            >
+              Retry
+            </Button>
+          </Box>
+        ) : (
+          <DataGrid
+            rows={sanitizedRows}
+            columns={columns}
+            getRowId={(row) => row.id}
+            paginationMode="server"
+            rowCount={rowCount}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 20, 50]}
+            checkboxSelection
+            disableRowSelectionOnClick
+            rowHeight={62}
+            sx={{
+              border: "none",
+              color: textPrimary,
+              flex: 1,
+              "& .MuiDataGrid-columnHeaders": {
+                bgcolor: headerBg,
+                borderBottom: `1px solid ${borderColor}`,
+                minHeight: "44px !important",
+                maxHeight: "44px !important",
+              },
+              "& .MuiDataGrid-columnHeaderTitle": {
+                fontWeight: 700,
+                fontSize: "0.72rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: textSecondary,
+              },
+              "& .MuiDataGrid-row": {
+                borderBottom: `1px solid ${borderColor}`,
+                transition: "background 0.15s ease",
+                cursor: "pointer",
+                "&:hover": { bgcolor: isDark ? alpha("#fff", 0.035) : alpha("#000", 0.018) },
+                "&.Mui-selected": {
+                  bgcolor: alpha(accentGreen, 0.08),
+                  "&:hover": { bgcolor: alpha(accentGreen, 0.12) },
+                },
+              },
+              "& .MuiDataGrid-cell": {
+                borderBottom: "none",
+                display: "flex",
+                alignItems: "center",
+                fontSize: "0.85rem",
+                overflow: "hidden",
+              },
+              "& .MuiDataGrid-footerContainer": {
+                bgcolor: headerBg,
+                borderTop: `1px solid ${borderColor}`,
+                color: textPrimary,
+                minHeight: 48,
+              },
+              "& .MuiCheckbox-root": { color: textSecondary },
+              "& .MuiDataGrid-columnSeparator": { color: borderColor },
+              "& .MuiTablePagination-root": { color: textPrimary },
+              "& .MuiTablePagination-selectIcon": { color: textSecondary },
+              "& .MuiTablePagination-actions button": { color: textSecondary },
+              "& .MuiDataGrid-virtualScroller": {
+                "&::-webkit-scrollbar": { width: 6, height: 6 },
+                "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
+                "&::-webkit-scrollbar-thumb": {
+                  bgcolor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.14)",
+                  borderRadius: 3,
+                },
+              },
+            }}
+          />
+        )}
+      </Paper>
     </Box>
   );
 }
+

@@ -10,18 +10,24 @@ import {
   TextField,
   CircularProgress,
   Snackbar,
-  IconButton,
-  Paper,
-  Divider,
   Alert,
+  Paper,
+  alpha,
+  Chip,
+  Tooltip,
+  InputAdornment,
 } from "@mui/material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuthStore } from "../../store/authStore";
 import { getTheme } from "../../store/theme";
 import { format } from "date-fns";
-
+import WaterDropIcon from "@mui/icons-material/WaterDrop";
+import ApartmentIcon from "@mui/icons-material/Apartment";
+import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
+import SpeedIcon from "@mui/icons-material/Speed";
+import CheckCircleIcon from "@mui/icons-material/CheckCircle";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 
 export default function CreateWaterReading() {
   const [form, setForm] = useState({ previousReading: "", currentReading: "" });
@@ -35,100 +41,125 @@ export default function CreateWaterReading() {
   const [formLoading, setFormLoading] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState("");
-  const [errors, setErrors] = useState({ currentReading: "" });
+  const [snackbarSeverity, setSnackbarSeverity] = useState("success");
+  const [errors, setErrors] = useState({});
+  const [submitted, setSubmitted] = useState(false);
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const BASEURL = import.meta.env.VITE_BASE_URL || "http://localhost:5000/api";
   const theme = getTheme();
 
-  // Fetch buildings (units + customers are embedded in the response)
+  const isDark        = theme.palette.mode === "dark";
+  const surfaceBg     = isDark ? "#141824" : "#f4f6fb";
+  const cardBg        = isDark ? "#1c2030" : "#ffffff";
+  const borderColor   = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const headerBg      = isDark ? "#181d2e" : "#f0f3f9";
+  const textPrimary   = theme.palette.text.primary;
+  const textSecondary = theme.palette.text.secondary;
+  const accentGreen   = theme.palette.greenAccent.main;
+  const accentBlue    = theme.palette.blueAccent?.main || "#1976d2";
+
+  const fieldSx = {
+    "& .MuiOutlinedInput-root": {
+      borderRadius: 1.5,
+      bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.02),
+      "& fieldset": { borderColor },
+      "&:hover fieldset": { borderColor: accentGreen },
+      "&.Mui-focused fieldset": { borderColor: accentGreen, borderWidth: 1.5 },
+    },
+    "& .MuiInputBase-input": { color: textPrimary, fontSize: "0.875rem" },
+    "& .MuiInputLabel-root": { color: textSecondary, fontSize: "0.875rem" },
+    "& .MuiInputLabel-root.Mui-focused": { color: accentGreen },
+    "& .MuiFormHelperText-root": { color: textSecondary },
+  };
+
+  const selectSx = {
+    borderRadius: 1.5,
+    bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.02),
+    "& .MuiOutlinedInput-notchedOutline": { borderColor },
+    "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen },
+    "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen, borderWidth: 1.5 },
+    "& .MuiSelect-select": { color: textPrimary, fontSize: "0.875rem" },
+    "& .MuiSvgIcon-root": { color: textSecondary },
+  };
+
+  // ── Fetchers ─────────────────────────────────────────────────────
   const fetchBuildings = useCallback(async () => {
     try {
       setBuildingsLoading(true);
-      const response = await axios.get(`${BASEURL}/buildings`, {
+      const res = await axios.get(`${BASEURL}/buildings`, {
         params: { page: 1, limit: 100 },
         withCredentials: true,
       });
-      const data = response.data?.buildings || response.data?.data || [];
-      setBuildings(data);
+      setBuildings(res.data?.buildings || res.data?.data || []);
     } catch (err) {
-      if (err.response?.status === 401) {
-        navigate("/login");
-      } else {
-        setSnackbarMessage("Failed to fetch buildings");
-        setSnackbarOpen(true);
-      }
+      if (err.response?.status === 401) { navigate("/login"); return; }
+      showSnackbar("Failed to fetch buildings", "error");
     } finally {
       setBuildingsLoading(false);
     }
   }, [navigate, BASEURL]);
 
-  // Fetch the latest water reading for the selected unit
   const fetchLatestReading = useCallback(async (unitId) => {
     try {
       setLatestReadingLoading(true);
       setLatestReading(null);
-      const response = await axios.get(`${BASEURL}/water-readings/unit/latest`, {
+      const res = await axios.get(`${BASEURL}/water-readings/unit/latest`, {
         params: { unitId },
         withCredentials: true,
       });
-      const data = response.data?.data || response.data || null;
+      const data = res.data?.data || res.data || null;
       setLatestReading(data);
-      // Pre-fill previous reading field with the latest meter reading value
-      if (data?.reading !== undefined && data?.reading !== null) {
+      if (data?.reading != null) {
         setForm((prev) => ({ ...prev, previousReading: String(data.reading) }));
       }
     } catch (err) {
       if (err.response?.status === 404) {
-        // No previous reading — that's fine, leave field empty
         setLatestReading(null);
       } else if (err.response?.status === 401) {
         navigate("/login");
       } else {
-        setSnackbarMessage("Failed to fetch latest reading");
-        setSnackbarOpen(true);
+        showSnackbar("Failed to fetch latest reading", "error");
       }
     } finally {
       setLatestReadingLoading(false);
     }
   }, [navigate, BASEURL]);
 
-  // Handle form input changes
+  // ── Helpers ───────────────────────────────────────────────────────
+  const showSnackbar = (msg, severity = "success") => {
+    setSnackbarMessage(msg);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
+  };
+
   const handleFormChange = (e) => {
     const { name, value } = e.target;
     setForm((prev) => ({ ...prev, [name]: value }));
     setErrors((prev) => ({ ...prev, [name]: "" }));
   };
 
-  // Validate form
   const validateForm = () => {
-    const newErrors = {};
-    if (!selectedUnitId) {
-      newErrors.unit = "Please select a unit";
-    }
+    const errs = {};
+    if (!selectedUnitId) errs.unit = "Please select a unit";
     const prev = form.previousReading !== "" ? parseFloat(form.previousReading) : null;
     const curr = parseFloat(form.currentReading);
     if (form.currentReading === "" || isNaN(curr) || curr < 0) {
-      newErrors.currentReading = "Current reading must be a non-negative number";
+      errs.currentReading = "Current reading must be a non-negative number";
     } else if (prev !== null && !isNaN(prev) && curr < prev) {
-      newErrors.currentReading = "Current reading cannot be less than previous reading";
+      errs.currentReading = "Current reading cannot be less than the previous reading";
     }
     if (form.previousReading !== "" && (isNaN(parseFloat(form.previousReading)) || parseFloat(form.previousReading) < 0)) {
-      newErrors.previousReading = "Previous reading must be a non-negative number";
+      errs.previousReading = "Previous reading must be a non-negative number";
     }
-    return newErrors;
+    return errs;
   };
 
-  // Handle form submission
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = validateForm();
-    if (Object.keys(validationErrors).length > 0) {
-      setErrors(validationErrors);
-      return;
-    }
-
+    if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     setFormLoading(true);
     try {
       const payload = {
@@ -136,59 +167,65 @@ export default function CreateWaterReading() {
         reading: parseFloat(form.currentReading),
         ...(form.previousReading !== "" && { previousReading: parseFloat(form.previousReading) }),
       };
-      console.log("Submitting payload:", payload);
-      const response = await axios.post(`${BASEURL}/water-reading`, payload, {
-        withCredentials: true,
-      });
-
-      setSnackbarMessage(response.data.message || "Reading created successfully");
-      setSnackbarOpen(true);
-      setForm({ previousReading: "", currentReading: "" });
-      setSelectedBuildingId("");
-      setSelectedUnitId("");
-      setLatestReading(null);
-      setErrors({ currentReading: "" });
-      setTimeout(() => navigate("/water-readings"), 2000);
-    } catch (error) {
-      console.error("Submission error:", error.response?.data);
-      setSnackbarMessage(
-        error.response?.data?.message || "Failed to create water reading"
-      );
-      setSnackbarOpen(true);
+      const res = await axios.post(`${BASEURL}/water-reading`, payload, { withCredentials: true });
+      showSnackbar(res.data?.message || "Reading created successfully", "success");
+      setSubmitted(true);
+    } catch (err) {
+      showSnackbar(err.response?.data?.message || "Failed to create water reading", "error");
     } finally {
       setFormLoading(false);
     }
   };
 
-  // Fetch buildings on mount if authenticated
+  const handleReset = () => {
+    setForm({ previousReading: "", currentReading: "" });
+    setSelectedBuildingId("");
+    setSelectedUnitId("");
+    setLatestReading(null);
+    setErrors({});
+    setSubmitted(false);
+  };
+
+  // ── Derived ───────────────────────────────────────────────────────
+  const consumption =
+    form.previousReading !== "" && form.currentReading !== "" &&
+    !isNaN(form.previousReading) && !isNaN(form.currentReading)
+      ? (parseFloat(form.currentReading) - parseFloat(form.previousReading)).toFixed(2)
+      : null;
+
+  const selectedUnit = units.find((u) => u.id === selectedUnitId) || null;
+  const unitCustomer =
+    selectedUnit?.customer ||
+    selectedUnit?.customers?.[0] ||
+    selectedUnit?.CustomerUnit?.[0]?.customer ||
+    null;
+
+  const formReady =
+    selectedBuildingId && selectedUnitId && form.currentReading !== "" && !Object.keys(errors).length;
+
+  // ── Effects ───────────────────────────────────────────────────────
   useEffect(() => {
-    if (!currentUser) {
-      navigate("/login");
-      return;
-    }
+    if (!currentUser) { navigate("/login"); return; }
     fetchBuildings();
   }, [currentUser, navigate, fetchBuildings]);
 
-  // Pull units from the already-fetched buildings array when building selection changes
   useEffect(() => {
     if (selectedBuildingId) {
       const building = buildings.find((b) => b.id === selectedBuildingId);
       setUnits(building?.units || []);
-      setSelectedUnitId("");
-      setForm({ previousReading: "", currentReading: "" });
-      setLatestReading(null);
     } else {
       setUnits([]);
-      setSelectedUnitId("");
-      setForm({ previousReading: "", currentReading: "" });
-      setLatestReading(null);
     }
+    setSelectedUnitId("");
+    setForm({ previousReading: "", currentReading: "" });
+    setLatestReading(null);
+    setErrors({});
   }, [selectedBuildingId, buildings]);
 
-  // Fetch latest reading when unit is selected
   useEffect(() => {
     if (selectedUnitId) {
       setForm({ previousReading: "", currentReading: "" });
+      setErrors({});
       fetchLatestReading(selectedUnitId);
     } else {
       setForm({ previousReading: "", currentReading: "" });
@@ -196,152 +233,266 @@ export default function CreateWaterReading() {
     }
   }, [selectedUnitId, fetchLatestReading]);
 
+  // ── Render ────────────────────────────────────────────────────────
   return (
-    <Box sx={{ p: 3, bgcolor: theme.palette.primary.main, minHeight: "100vh" }}>
-      <IconButton
-        onClick={() => navigate("/water-readings")}
-        sx={{
-          position: "absolute",
-          top: 16,
-          left: 16,
-          color: theme.palette.greenAccent.main,
-          "&:hover": { bgcolor: theme.palette.greenAccent.main + "20" },
-        }}
-        aria-label="Go back"
-      >
-        <ArrowBackIcon sx={{ fontSize: 40 }} />
-      </IconButton>
+    <Box sx={{ minHeight: "100vh", bgcolor: surfaceBg, p: { xs: 2, md: 3 }, display: "flex", flexDirection: "column", gap: 2.5 }}>
 
-      <Typography variant="h4" sx={{ mb: 3, color: theme.palette.grey[100], textAlign: "center" }}>
-        Create New Water Reading
-      </Typography>
-
-      <Paper
-        sx={{
-          maxWidth: 600,
-          mx: "auto",
-          p: 3,
-          bgcolor: theme.palette.primary.main,
-          borderRadius: 1,
-          boxShadow: 24,
-        }}
-      >
-        {formLoading ? (
-          <Box sx={{ display: "flex", justifyContent: "center", my: 2 }}>
-            <CircularProgress size={24} sx={{ color: theme.palette.greenAccent.main }} />
+      {/* Page Header */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 46, height: 46, borderRadius: 2,
+              bgcolor: alpha(accentBlue, 0.12),
+              border: `1px solid ${alpha(accentBlue, 0.2)}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+            }}
+          >
+            <WaterDropIcon sx={{ color: accentBlue, fontSize: 24 }} />
           </Box>
-        ) : (
-          <form onSubmit={handleSubmit}>
-            <FormControl
-              fullWidth
-              variant="outlined"
-              size="small"
-              sx={{ mb: 2 }}
-            >
-              <InputLabel>Building *</InputLabel>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: textPrimary, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+              Create Water Reading
+            </Typography>
+            <Typography variant="caption" sx={{ color: textSecondary }}>
+              Record a new meter reading for a unit
+            </Typography>
+          </Box>
+        </Box>
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => navigate("/water-readings")}
+          sx={{
+            borderColor, color: textSecondary, textTransform: "none", fontWeight: 500, borderRadius: 1.5,
+            "&:hover": { borderColor: accentGreen, color: accentGreen, bgcolor: alpha(accentGreen, 0.06) },
+          }}
+        >
+          Back to Readings
+        </Button>
+      </Box>
+
+      {/* Two-column form layout */}
+      <Box
+        sx={{
+          display: "grid",
+          gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+          gap: 2.5,
+          alignItems: "start",
+        }}
+      >
+        {/* ── Left Card: Select Location ── */}
+        <Paper
+          elevation={0}
+          sx={{ borderRadius: 2, border: `1px solid ${borderColor}`, bgcolor: cardBg, overflow: "hidden" }}
+        >
+          {/* Card header */}
+          <Box sx={{ px: 2.5, py: 1.5, bgcolor: headerBg, borderBottom: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 1 }}>
+            <ApartmentIcon sx={{ color: accentBlue, fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: textPrimary }}>
+              Select Location
+            </Typography>
+          </Box>
+
+          <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Building selector */}
+            <FormControl fullWidth size="small" variant="outlined">
+              <InputLabel sx={{ color: textSecondary, fontSize: "0.875rem", "&.Mui-focused": { color: accentGreen } }}>
+                Building *
+              </InputLabel>
               <Select
                 value={selectedBuildingId}
                 onChange={(e) => setSelectedBuildingId(e.target.value)}
                 label="Building *"
                 disabled={buildingsLoading}
+                sx={selectSx}
               >
                 <MenuItem value="">
-                  <em>{buildingsLoading ? "Loading buildings..." : "Select a building"}</em>
+                  <Typography variant="body2" sx={{ color: textSecondary, fontStyle: "italic" }}>
+                    {buildingsLoading ? "Loading buildings\u2026" : "Select a building"}
+                  </Typography>
                 </MenuItem>
-                {buildings.map((building) => (
-                  <MenuItem key={building.id} value={building.id}>
-                    {building.name || building.buildingName || "Unnamed"}
+                {buildings.map((b) => (
+                  <MenuItem key={b.id} value={b.id}>
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <ApartmentIcon sx={{ fontSize: 15, color: accentBlue }} />
+                      <Typography variant="body2">{b.name || b.buildingName || "Unnamed"}</Typography>
+                    </Box>
                   </MenuItem>
                 ))}
               </Select>
+              {buildingsLoading && (
+                <Box sx={{ display: "flex", alignItems: "center", gap: 1, mt: 0.75 }}>
+                  <CircularProgress size={12} sx={{ color: accentGreen }} />
+                  <Typography variant="caption" sx={{ color: textSecondary }}>Loading\u2026</Typography>
+                </Box>
+              )}
             </FormControl>
 
-            <FormControl
-              fullWidth
-              variant="outlined"
-              size="small"
-              sx={{ mb: 2 }}
-              error={!!errors.unit}
-            >
-              <InputLabel>Unit *</InputLabel>
+            {/* Unit selector */}
+            <FormControl fullWidth size="small" variant="outlined" error={!!errors.unit} disabled={!selectedBuildingId}>
+              <InputLabel sx={{ color: textSecondary, fontSize: "0.875rem", "&.Mui-focused": { color: accentGreen } }}>
+                Unit *
+              </InputLabel>
               <Select
                 value={selectedUnitId}
                 onChange={(e) => setSelectedUnitId(e.target.value)}
                 label="Unit *"
-                disabled={formLoading || !selectedBuildingId}
+                sx={selectSx}
               >
                 <MenuItem value="">
-                  <em>
-                    {units.length === 0 ? "No units available" : "Select a unit"}
-                  </em>
+                  <Typography variant="body2" sx={{ color: textSecondary, fontStyle: "italic" }}>
+                    {!selectedBuildingId ? "Select a building first" : units.length === 0 ? "No units available" : "Select a unit"}
+                  </Typography>
                 </MenuItem>
                 {units.map((unit) => {
-                  const customer = unit?.customer || unit?.customers?.[0] || unit?.CustomerUnit?.[0]?.customer;
+                  const customer =
+                    unit?.customer ||
+                    unit?.customers?.[0] ||
+                    unit?.CustomerUnit?.[0]?.customer;
+                  const isOccupied = unit.status === "OCCUPIED" || unit.status === "OCCUPIED_PENDING_PAYMENT";
+                  const isVacant   = unit.status === "VACANT";
                   return (
-                    <MenuItem
-                      key={unit.id}
-                      value={unit.id}
-                      sx={{
-                        color:
-                          unit.status === "VACANT" || unit.status === "MAINTENANCE"
-                            ? "grey.500"
-                            : "inherit",
-                      }}
-                    >
-                      {unit.unitNumber}{" "}
-                      {unit.status === "OCCUPIED" || unit.status === "OCCUPIED_PENDING_PAYMENT"
-                        ? customer
-                          ? `(${customer.firstName} ${customer.lastName})`
-                          : "(Occupied)"
-                        : unit.status === "VACANT"
-                        ? "(Vacant)"
-                        : "(Maintenance)"}
+                    <MenuItem key={unit.id} value={unit.id}>
+                      <Box sx={{ display: "flex", alignItems: "center", gap: 1, width: "100%" }}>
+                        <MeetingRoomIcon sx={{ fontSize: 15, color: isOccupied ? accentGreen : textSecondary }} />
+                        <Typography variant="body2" sx={{ flex: 1 }}>
+                          {unit.unitNumber}
+                          {isOccupied && customer ? ` \u2014 ${customer.firstName} ${customer.lastName}` : ""}
+                        </Typography>
+                        <Chip
+                          label={isOccupied ? "Occupied" : isVacant ? "Vacant" : "Maintenance"}
+                          size="small"
+                          sx={{
+                            height: 18, fontSize: "0.62rem", fontWeight: 600,
+                            bgcolor: isOccupied ? alpha(accentGreen, 0.1) : alpha(textSecondary, 0.08),
+                            color: isOccupied ? accentGreen : textSecondary,
+                          }}
+                        />
+                      </Box>
                     </MenuItem>
                   );
                 })}
               </Select>
               {errors.unit && (
-                <Typography color="error" variant="caption">
-                  {errors.unit}
-                </Typography>
+                <Typography variant="caption" sx={{ color: "#f44336", mt: 0.5 }}>{errors.unit}</Typography>
               )}
             </FormControl>
 
-            {/* Previous reading info card */}
-            {latestReadingLoading && (
-              <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 2 }}>
-                <CircularProgress size={16} sx={{ color: theme.palette.greenAccent.main }} />
-                <Typography variant="caption" sx={{ color: theme.palette.grey[400] }}>
-                  Fetching previous reading...
-                </Typography>
-              </Box>
-            )}
-
-            {!latestReadingLoading && selectedUnitId && form.customerId && (
-              <Alert
-                severity={latestReading ? "info" : "warning"}
-                sx={{ mb: 2, fontSize: "0.82rem" }}
+            {/* Selected unit info card */}
+            {selectedUnit && (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 1.75, borderRadius: 1.5,
+                  border: `1px solid ${alpha(accentBlue, 0.2)}`,
+                  bgcolor: alpha(accentBlue, 0.04),
+                }}
               >
-                {latestReading ? (
-                  <>
-                    <strong>Last Reading:</strong> {latestReading.reading} m³ &nbsp;|&nbsp;
-                    <strong>Consumption:</strong> {latestReading.consumption ?? "—"} m³ &nbsp;|&nbsp;
-                    <strong>Period:</strong>{" "}
-                    {latestReading.period
-                      ? format(new Date(latestReading.period), "MMM yyyy")
-                      : "—"}
-                  </>
-                ) : (
-                  "No previous reading found for this unit. Enter 0 as the previous reading if this is the first reading."
-                )}
-              </Alert>
+                <Typography variant="caption" sx={{ color: accentBlue, fontWeight: 700, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                  Selected Unit
+                </Typography>
+                <Box sx={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 0.75, mt: 1 }}>
+                  {[
+                    { label: "Unit", value: selectedUnit.unitNumber || "\u2014" },
+                    { label: "Status", value: selectedUnit.status || "\u2014" },
+                    { label: "Tenant", value: unitCustomer ? `${unitCustomer.firstName} ${unitCustomer.lastName}` : "Vacant" },
+                    { label: "Phone", value: unitCustomer?.phoneNumber || "\u2014" },
+                  ].map((row) => (
+                    <Box key={row.label}>
+                      <Typography variant="caption" sx={{ color: textSecondary, display: "block" }}>{row.label}</Typography>
+                      <Typography variant="body2" sx={{ fontWeight: 600, color: textPrimary, fontSize: "0.8rem" }}>{row.value}</Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Paper>
             )}
+          </Box>
+        </Paper>
 
-            <Divider sx={{ mb: 2, borderColor: theme.palette.grey[700] }} />
+        {/* ── Right Card: Reading Details ── */}
+        <Paper
+          elevation={0}
+          sx={{
+            borderRadius: 2,
+            border: `1px solid ${borderColor}`,
+            bgcolor: cardBg,
+            overflow: "hidden",
+            opacity: selectedUnitId ? 1 : 0.55,
+            pointerEvents: selectedUnitId ? "auto" : "none",
+            transition: "opacity 0.2s ease",
+          }}
+        >
+          {/* Card header */}
+          <Box sx={{ px: 2.5, py: 1.5, bgcolor: headerBg, borderBottom: `1px solid ${borderColor}`, display: "flex", alignItems: "center", gap: 1 }}>
+            <SpeedIcon sx={{ color: accentGreen, fontSize: 18 }} />
+            <Typography variant="subtitle2" sx={{ fontWeight: 700, color: textPrimary }}>
+              Meter Reading
+            </Typography>
+          </Box>
 
+          <Box
+            component="form"
+            onSubmit={handleSubmit}
+            sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}
+          >
+            {/* Previous reading info */}
+            {latestReadingLoading ? (
+              <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1 }}>
+                <CircularProgress size={16} sx={{ color: accentBlue }} />
+                <Typography variant="caption" sx={{ color: textSecondary }}>Fetching previous reading\u2026</Typography>
+              </Box>
+            ) : selectedUnitId ? (
+              <Paper
+                elevation={0}
+                sx={{
+                  p: 1.5, borderRadius: 1.5,
+                  border: `1px solid ${latestReading ? alpha(accentBlue, 0.2) : alpha("#ff9800", 0.3)}`,
+                  bgcolor: latestReading ? alpha(accentBlue, 0.04) : alpha("#ff9800", 0.04),
+                  display: "flex", alignItems: "flex-start", gap: 1,
+                }}
+              >
+                <InfoOutlinedIcon sx={{ color: latestReading ? accentBlue : "#ff9800", fontSize: 18, mt: 0.1, flexShrink: 0 }} />
+                <Box>
+                  {latestReading ? (
+                    <>
+                      <Typography variant="caption" sx={{ color: textSecondary, display: "block", mb: 0.5 }}>
+                        Previous reading on file
+                      </Typography>
+                      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+                        <Box>
+                          <Typography variant="caption" sx={{ color: textSecondary }}>Reading</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: accentBlue }}>{latestReading.reading} m\u00b3</Typography>
+                        </Box>
+                        {latestReading.consumption != null && (
+                          <Box>
+                            <Typography variant="caption" sx={{ color: textSecondary }}>Last Consumption</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 700, color: accentGreen }}>{latestReading.consumption} m\u00b3</Typography>
+                          </Box>
+                        )}
+                        {latestReading.period && (
+                          <Box>
+                            <Typography variant="caption" sx={{ color: textSecondary }}>Period</Typography>
+                            <Typography variant="body2" sx={{ fontWeight: 600, color: textPrimary }}>
+                              {format(new Date(latestReading.period), "MMM yyyy")}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+                    </>
+                  ) : (
+                    <Typography variant="caption" sx={{ color: "#ff9800" }}>
+                      No previous reading found for this unit. Enter 0 as the previous reading if this is the first reading.
+                    </Typography>
+                  )}
+                </Box>
+              </Paper>
+            ) : null}
+
+            {/* Previous reading field */}
             <TextField
               fullWidth
-              label="Previous Reading (m³) — optional"
+              label="Previous Reading (m\u00b3) \u2014 optional"
               name="previousReading"
               type="number"
               value={form.previousReading}
@@ -350,13 +501,17 @@ export default function CreateWaterReading() {
               helperText={errors.previousReading || "Auto-filled from last recorded reading. Override if needed."}
               variant="outlined"
               size="small"
-              sx={{ mb: 2 }}
               inputProps={{ step: "0.01", min: 0 }}
+              InputProps={{
+                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>m\u00b3</Typography></InputAdornment>,
+              }}
+              sx={fieldSx}
             />
 
+            {/* Current reading field */}
             <TextField
               fullWidth
-              label="Current Reading (m³) *"
+              label="Current Reading (m\u00b3) *"
               name="currentReading"
               type="number"
               value={form.currentReading}
@@ -364,54 +519,146 @@ export default function CreateWaterReading() {
               error={!!errors.currentReading}
               helperText={
                 errors.currentReading ||
-                (form.previousReading !== "" && form.currentReading !== "" &&
-                !isNaN(form.previousReading) && !isNaN(form.currentReading)
-                  ? `Consumption: ${(parseFloat(form.currentReading) - parseFloat(form.previousReading)).toFixed(2)} m³`
+                (consumption !== null
+                  ? `Consumption: ${consumption} m\u00b3`
                   : "The meter reading taken today")
               }
               variant="outlined"
               size="small"
-              sx={{ mb: 2 }}
               inputProps={{ step: "0.01", min: 0 }}
+              InputProps={{
+                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>m\u00b3</Typography></InputAdornment>,
+              }}
+              sx={{
+                ...fieldSx,
+                "& .MuiFormHelperText-root": {
+                  color: consumption !== null && !errors.currentReading ? accentGreen : textSecondary,
+                  fontWeight: consumption !== null && !errors.currentReading ? 600 : 400,
+                },
+              }}
             />
 
-            <Box sx={{ display: "flex", gap: 2, mt: 2 }}>
-              <Button
-                type="submit"
-                variant="contained"
+            {/* Consumption summary preview */}
+            {formReady && consumption !== null && !submitted && (
+              <Paper
+                elevation={0}
                 sx={{
-                  bgcolor: theme.palette.greenAccent.main,
-                  color: "#fff",
-                  "&:hover": { bgcolor: theme.palette.greenAccent.main, opacity: 0.9 },
+                  p: 1.75, borderRadius: 1.5,
+                  border: `1px solid ${alpha(accentGreen, 0.25)}`,
+                  bgcolor: alpha(accentGreen, 0.05),
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
                 }}
-                disabled={formLoading}
-                fullWidth
               >
-                {formLoading ? "Creating..." : "Create Reading"}
-              </Button>
-              <Button
-                variant="outlined"
-                onClick={() => navigate("/water-readings")}
-                sx={{
-                  color: theme.palette.grey[300],
-                  borderColor: theme.palette.grey[300],
-                  "&:hover": { borderColor: theme.palette.grey[300], opacity: 0.9 },
-                }}
-                fullWidth
-              >
-                Cancel
-              </Button>
-            </Box>
-          </form>
-        )}
-      </Paper>
+                <Box>
+                  <Typography variant="caption" sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                    Consumption Summary
+                  </Typography>
+                  <Typography variant="h6" sx={{ fontWeight: 700, color: accentGreen, lineHeight: 1.2, mt: 0.25 }}>
+                    {consumption} m\u00b3
+                  </Typography>
+                  <Typography variant="caption" sx={{ color: textSecondary }}>
+                    {form.previousReading} \u2192 {form.currentReading} m\u00b3
+                  </Typography>
+                </Box>
+                <WaterDropIcon sx={{ color: alpha(accentGreen, 0.35), fontSize: 36 }} />
+              </Paper>
+            )}
+
+            {/* Success state */}
+            {submitted ? (
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 2, borderRadius: 1.5, textAlign: "center",
+                    border: `1px solid ${alpha(accentGreen, 0.3)}`,
+                    bgcolor: alpha(accentGreen, 0.06),
+                  }}
+                >
+                  <CheckCircleIcon sx={{ color: accentGreen, fontSize: 36, mb: 0.5 }} />
+                  <Typography variant="body1" sx={{ fontWeight: 700, color: accentGreen }}>Reading Recorded</Typography>
+                  <Typography variant="caption" sx={{ color: textSecondary }}>{snackbarMessage}</Typography>
+                </Paper>
+                <Box sx={{ display: "flex", gap: 1.5 }}>
+                  <Button
+                    fullWidth
+                    variant="outlined"
+                    onClick={handleReset}
+                    sx={{
+                      borderColor: accentGreen, color: accentGreen, textTransform: "none", fontWeight: 600,
+                      borderRadius: 1.5,
+                      "&:hover": { bgcolor: alpha(accentGreen, 0.06) },
+                    }}
+                  >
+                    Record Another
+                  </Button>
+                  <Button
+                    fullWidth
+                    variant="contained"
+                    onClick={() => navigate("/water-readings")}
+                    sx={{
+                      bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
+                      borderRadius: 1.5, boxShadow: `0 2px 10px ${alpha(accentGreen, 0.35)}`,
+                      "&:hover": { bgcolor: theme.palette.greenAccent.dark || accentGreen },
+                    }}
+                  >
+                    View All Readings
+                  </Button>
+                </Box>
+              </Box>
+            ) : (
+              <Box sx={{ display: "flex", gap: 1.5, pt: 0.5 }}>
+                <Button
+                  type="submit"
+                  variant="contained"
+                  disabled={formLoading || !selectedUnitId}
+                  fullWidth
+                  sx={{
+                    bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
+                    borderRadius: 1.5, boxShadow: `0 2px 10px ${alpha(accentGreen, 0.35)}`,
+                    "&:hover": { bgcolor: theme.palette.greenAccent.dark || accentGreen, boxShadow: `0 4px 18px ${alpha(accentGreen, 0.45)}` },
+                    "&.Mui-disabled": { bgcolor: alpha(accentGreen, 0.35), color: "#fff" },
+                  }}
+                >
+                  {formLoading ? (
+                    <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+                      <CircularProgress size={16} sx={{ color: "#fff" }} />
+                      <span>Creating\u2026</span>
+                    </Box>
+                  ) : (
+                    "Create Reading"
+                  )}
+                </Button>
+                <Tooltip title="Cancel and go back">
+                  <Button
+                    variant="outlined"
+                    onClick={() => navigate("/water-readings")}
+                    fullWidth
+                    sx={{
+                      borderColor, color: textSecondary, textTransform: "none", fontWeight: 500,
+                      borderRadius: 1.5,
+                      "&:hover": { borderColor: "#f44336", color: "#f44336", bgcolor: alpha("#f44336", 0.04) },
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                </Tooltip>
+              </Box>
+            )}
+          </Box>
+        </Paper>
+      </Box>
 
       <Snackbar
         open={snackbarOpen}
-        autoHideDuration={3000}
+        autoHideDuration={5000}
         onClose={() => setSnackbarOpen(false)}
-        message={snackbarMessage}
-      />
+        anchorOrigin={{ vertical: "top", horizontal: "center" }}
+      >
+        <Alert onClose={() => setSnackbarOpen(false)} severity={snackbarSeverity} sx={{ width: "100%" }}>
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 }

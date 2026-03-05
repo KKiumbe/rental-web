@@ -1,10 +1,6 @@
-import React, { useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import axios from "axios";
-import {
-  DataGrid,
-  GridToolbarContainer,
-  GridToolbarExport,
-} from "@mui/x-data-grid";
+import { DataGrid, GridToolbarContainer, GridToolbarExport } from "@mui/x-data-grid";
 import {
   CircularProgress,
   Typography,
@@ -13,29 +9,36 @@ import {
   Button,
   Snackbar,
   IconButton,
-  FormControl,
-  InputLabel,
   Select,
   MenuItem,
   Chip,
   Alert,
+  Paper,
+  Divider,
+  InputAdornment,
+  Tooltip,
+  alpha,
+  ToggleButton,
 } from "@mui/material";
 import EditIcon from "@mui/icons-material/Edit";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import SearchIcon from "@mui/icons-material/Search";
+import PaymentsIcon from "@mui/icons-material/Payments";
+import AddIcon from "@mui/icons-material/Add";
+import FilterListIcon from "@mui/icons-material/FilterList";
+import ReceiptIcon from "@mui/icons-material/Receipt";
+import ErrorOutlineIcon from "@mui/icons-material/ErrorOutline";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
-import TitleComponent from "../../components/title";
 import { getTheme } from "../../store/theme";
 
-// Flatten nested payment response
 const flattenPayments = (payments) => {
   return payments.map((payment) => {
     const receipt = payment.receipt || {};
     const receiptInvoices = receipt.receiptInvoices || [];
     const firstInvoice = receiptInvoices[0]?.invoice || {};
-
     return {
-       id: payment.id,
+      id: payment.id,
       tenantId: payment.tenantId,
       amount: payment.amount,
       modeOfPayment: payment.modeOfPayment,
@@ -46,11 +49,19 @@ const flattenPayments = (payments) => {
       ref: payment.ref || "N/A",
       createdAt: payment.createdAt,
       receiptId: receipt.id || null,
-      receiptNumber: receipt.id ? `REC-${receipt.id}` : "N/A", // Adjust based on backend receipt number format
+      receiptNumber: receipt.id ? `REC-${receipt.id}` : "N/A",
       invoiceId: firstInvoice.id || null,
       invoiceNumber: firstInvoice.invoiceNumber || "N/A",
     };
   });
+};
+
+const modeChipStyle = (mode) => {
+  const m = (mode || "").toUpperCase();
+  if (m === "MPESA")         return { bg: alpha("#4caf50", 0.12), color: "#4caf50", border: "#4caf50" };
+  if (m === "CASH")          return { bg: alpha("#1976d2", 0.12), color: "#1976d2", border: "#1976d2" };
+  if (m === "BANK_TRANSFER") return { bg: alpha("#9c27b0", 0.12), color: "#9c27b0", border: "#9c27b0" };
+  return                            { bg: alpha("#90a4ae", 0.12), color: "#90a4ae", border: "#90a4ae" };
 };
 
 const Payments = () => {
@@ -58,10 +69,7 @@ const Payments = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [openSnackbar, setOpenSnackbar] = useState(false);
-  const [paginationModel, setPaginationModel] = useState({
-    page: 0,
-    pageSize: 10,
-  });
+  const [paginationModel, setPaginationModel] = useState({ page: 0, pageSize: 10 });
   const [rowCount, setRowCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState("name");
@@ -73,25 +81,33 @@ const Payments = () => {
   const theme = getTheme();
   const BASEURL = import.meta.env.VITE_BASE_URL;
 
+  const isDark        = theme.palette.mode === "dark";
+  const surfaceBg     = isDark ? "#141824" : "#f4f6fb";
+  const cardBg        = isDark ? "#1c2030" : "#ffffff";
+  const borderColor   = isDark ? "rgba(255,255,255,0.07)" : "rgba(0,0,0,0.08)";
+  const headerBg      = isDark ? "#181d2e" : "#f0f3f9";
+  const textPrimary   = theme.palette.text.primary;
+  const textSecondary = theme.palette.text.secondary;
+  const accentGreen   = theme.palette.greenAccent.main;
+  const accentBlue    = theme.palette.blueAccent?.main || "#1976d2";
+
   useEffect(() => {
-    if (!currentUser) {
-      navigate("/login");
-    }
+    if (!currentUser) navigate("/login");
   }, [currentUser, navigate]);
 
   useEffect(() => {
     if (currentUser) {
       fetchPayments(paginationModel.page, paginationModel.pageSize, modeFilter, showUnreceiptedOnly);
     }
-  }, [currentUser]);
+  }, [currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (currentUser && !searchQuery) {
       fetchPayments(paginationModel.page, paginationModel.pageSize, modeFilter, showUnreceiptedOnly);
     }
-  }, [paginationModel, modeFilter, showUnreceiptedOnly, currentUser]);
+  }, [paginationModel, modeFilter, showUnreceiptedOnly, currentUser]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const handleCloseSnackbar = (event, reason) => {
+  const handleCloseSnackbar = (_, reason) => {
     if (reason === "clickaway") return;
     setOpenSnackbar(false);
     setError(null);
@@ -104,19 +120,12 @@ const Payments = () => {
       const endpoint = unreceiptedOnly ? `${BASEURL}/payments/unreceipted` : `${BASEURL}/payments`;
       const params = { page: page + 1, limit: pageSize };
       if (mode !== "all") params.mode = mode;
-
       const response = await axios.get(endpoint, { params, withCredentials: true });
-      const { payments: fetchedPayments, total } = response.data;
-      const flattenedData = flattenPayments(fetchedPayments || []);
-      setPayments(flattenedData);
+      const { payments: fetched, total } = response.data;
+      setPayments(flattenPayments(fetched || []));
       setRowCount(total || 0);
-      console.log(`this is the payment object ${JSON.stringify(fetchedPayments)}`);
     } catch (err) {
-      setError(
-        err.response?.status === 404
-          ? "User not found"
-          : err.response?.data?.error || "Failed to fetch payments."
-      );
+      setError(err.response?.status === 404 ? "Not found" : err.response?.data?.error || "Failed to fetch payments.");
       setOpenSnackbar(true);
       setPayments([]);
       setRowCount(0);
@@ -133,16 +142,11 @@ const Payments = () => {
         params: { name: query, page: page + 1, limit: pageSize },
         withCredentials: true,
       });
-      const { payments: fetchedPayments, total } = response.data;
-      const flattenedData = flattenPayments(fetchedPayments || []);
-      setPayments(flattenedData);
+      const { payments: fetched, total } = response.data;
+      setPayments(flattenPayments(fetched || []));
       setRowCount(total || 0);
     } catch (err) {
-      setError(
-        err.response?.status === 404
-          ? "User not found"
-          : err.response?.data?.error || "Failed to search payments by name."
-      );
+      setError(err.response?.data?.error || "Failed to search by name.");
       setOpenSnackbar(true);
       setPayments([]);
       setRowCount(0);
@@ -160,15 +164,10 @@ const Payments = () => {
         withCredentials: true,
       });
       const { transaction } = response.data;
-      const flattenedData = flattenPayments([transaction]);
-      setPayments(flattenedData);
+      setPayments(flattenPayments([transaction]));
       setRowCount(1);
     } catch (err) {
-      setError(
-        err.response?.status === 404
-          ? "User not found"
-          : err.response?.data?.error || "Failed to search payment by transaction ID."
-      );
+      setError(err.response?.data?.error || "Failed to search by transaction ID.");
       setOpenSnackbar(true);
       setPayments([]);
       setRowCount(0);
@@ -185,18 +184,11 @@ const Payments = () => {
         params: { ref: query, page: page + 1, limit: pageSize },
         withCredentials: true,
       });
-      const { payments: fetchedPayments, total } = response.data;
-      const flattenedData = flattenPayments(fetchedPayments || []);
-      setPayments(flattenedData);
+      const { payments: fetched, total } = response.data;
+      setPayments(flattenPayments(fetched || []));
       setRowCount(total || 0);
-
-      console.log(`this is the payment object ${JSON.stringify(fetchedPayments)}`);
     } catch (err) {
-      setError(
-        err.response?.status === 404
-          ? "User not found"
-          : err.response?.data?.error || "Failed to search payments by ref number."
-      );
+      setError(err.response?.data?.error || "Failed to search by reference.");
       setOpenSnackbar(true);
       setPayments([]);
       setRowCount(0);
@@ -204,10 +196,6 @@ const Payments = () => {
       setLoading(false);
     }
   };
-
-  const handleEditPress = (id) => navigate(`/payments/${id}`);
-
-  const handleSearchChange = (e) => setSearchQuery(e.target.value);
 
   const handleSearchTypeChange = (e) => {
     setSearchType(e.target.value);
@@ -223,285 +211,514 @@ const Payments = () => {
 
   const handleSearch = () => {
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
-    const trimmedQuery = searchQuery.trim();
-    if (trimmedQuery === "") {
-      fetchPayments(0, paginationModel.pageSize, modeFilter, showUnreceiptedOnly);
-    } else {
-      switch (searchType) {
-        case "name":
-          fetchPaymentsByName(0, paginationModel.pageSize, trimmedQuery);
-          break;
-        case "transactionId":
-          fetchPaymentByTransactionId(0, paginationModel.pageSize, trimmedQuery);
-          break;
-        case "ref":
-          fetchPaymentsByRef(0, paginationModel.pageSize, trimmedQuery);
-          break;
-        default:
-          break;
-      }
-    }
+    const q = searchQuery.trim();
+    if (!q) { fetchPayments(0, paginationModel.pageSize, modeFilter, showUnreceiptedOnly); return; }
+    if (searchType === "name")               fetchPaymentsByName(0, paginationModel.pageSize, q);
+    else if (searchType === "transactionId") fetchPaymentByTransactionId(0, paginationModel.pageSize, q);
+    else                                     fetchPaymentsByRef(0, paginationModel.pageSize, q);
   };
 
-  const handleKeyPress = (e) => {
-    if (e.key === "Enter") handleSearch();
-  };
+  const handleKeyPress = (e) => { if (e.key === "Enter") handleSearch(); };
 
   const handleFilterUnreceipted = () => {
     setShowUnreceiptedOnly((prev) => {
-      const newValue = !prev;
-      fetchPayments(0, paginationModel.pageSize, modeFilter, newValue);
-      return newValue;
+      const next = !prev;
+      fetchPayments(0, paginationModel.pageSize, modeFilter, next);
+      return next;
     });
     setPaginationModel((prev) => ({ ...prev, page: 0 }));
   };
 
+  const searchPlaceholder = {
+    name: "Search by tenant name\u2026",
+    transactionId: "Search by transaction ID\u2026",
+    ref: "Search by reference number\u2026",
+  }[searchType];
+
+  const totalPages = Math.ceil(rowCount / paginationModel.pageSize) || 1;
+
   const columns = [
     {
       field: "view",
-      headerName: "View",
-      width: 100,
+      headerName: "Actions",
+      width: 110,
+      sortable: false,
+      filterable: false,
       renderCell: (params) => (
-        <IconButton
-          component={Link}
-          to={`/payments/${params.row.id}`}
-          sx={{ color: theme.palette.greenAccent.main }}
-        >
-          <VisibilityIcon />
-        </IconButton>
+        <Box sx={{ display: "flex", gap: 0.5, alignItems: "center", height: "100%" }}>
+          <Tooltip title="View Payment">
+            <IconButton
+              component={Link}
+              to={`/payments/${params.row.id}`}
+              size="small"
+              sx={{ color: accentGreen, "&:hover": { bgcolor: alpha(accentGreen, 0.1) } }}
+            >
+              <VisibilityIcon fontSize="small" />
+            </IconButton>
+          </Tooltip>
+          {!params.row.receipted && (
+            <Tooltip title="Edit Payment">
+              <IconButton
+                onClick={() => navigate(`/payments/${params.row.id}`)}
+                size="small"
+                sx={{ color: accentBlue, "&:hover": { bgcolor: alpha(accentBlue, 0.1) } }}
+              >
+                <EditIcon fontSize="small" />
+              </IconButton>
+            </Tooltip>
+          )}
+        </Box>
       ),
     },
-    { field: "amount", headerName: "Amount (KES)", width: 150 },
-    { field: "modeOfPayment", headerName: "Mode of Payment", width: 180 },
     {
-      field: "createdAt",
-      headerName: "Date",
+      field: "firstName",
+      headerName: "Tenant",
       width: 200,
+      renderCell: (params) => (
+        <Box sx={{ display: "flex", flexDirection: "column", justifyContent: "center", py: 0.5 }}>
+          <Typography
+            variant="body2"
+            sx={{ fontWeight: 600, color: textPrimary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
+            {params.row.firstName} {params.row.lastName}
+          </Typography>
+          <Typography
+            variant="caption"
+            sx={{ color: textSecondary, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}
+          >
+            {params.row.ref !== "N/A" ? `Ref: ${params.row.ref}` : "\u2014"}
+          </Typography>
+        </Box>
+      ),
+    },
+    {
+      field: "amount",
+      headerName: "Amount (KES)",
+      width: 150,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontWeight: 700, color: accentGreen }}>
+          {Number(params.value || 0).toLocaleString()}
+        </Typography>
+      ),
+    },
+    {
+      field: "modeOfPayment",
+      headerName: "Mode",
+      width: 155,
       renderCell: (params) => {
-        if (!params?.value) return "N/A";
-    
-        try {
-          const date = new Date(params.value);
-          date.setHours(date.getHours() - 1); // Subtract 1 hour to correct time
-    
-          const day = String(date.getDate()).padStart(2, '0');
-          const month = date.toLocaleString('default', { month: 'short' });
-          const year = date.getFullYear();
-    
-          const hours = String(date.getHours()).padStart(2, '0');
-          const minutes = String(date.getMinutes()).padStart(2, '0');
-          const seconds = String(date.getSeconds()).padStart(2, '0');
-    
-          return `${day} ${month} ${year}, ${hours}:${minutes}:${seconds}`;
-        } catch (error) {
-          console.error("Invalid Date:", params.value);
-          return "Invalid Date";
-        }
+        const s = modeChipStyle(params.value);
+        return (
+          <Chip
+            label={params.value || "\u2014"}
+            size="small"
+            sx={{ bgcolor: s.bg, color: s.color, border: `1px solid ${s.border}`, fontWeight: 700, fontSize: "0.68rem", letterSpacing: "0.03em" }}
+          />
+        );
       },
     },
-    { field: "transactionId", headerName: "Transaction ID", width: 200 },
-    { field: "firstName", headerName: "First Name", width: 180 },
-    { field: "lastName", headerName: "Last Name", width: 180 },
-    { field: "ref", headerName: "Reference Number", width: 180 },
     {
       field: "receipted",
       headerName: "Status",
-      width: 150,
+      width: 140,
       renderCell: (params) => (
         <Chip
-          label={params.value ? "Receipted" : "Not Receipted"}
-          sx={{
-            bgcolor: params.value ? theme.palette.greenAccent.main : "#ff9800",
-            color: "#fff",
-          }}
+          label={params.value ? "Receipted" : "Pending"}
           size="small"
+          sx={{
+            bgcolor: params.value ? alpha("#4caf50", 0.12) : alpha("#ff9800", 0.12),
+            color:   params.value ? "#4caf50" : "#ff9800",
+            border:  `1px solid ${params.value ? "#4caf50" : "#ff9800"}`,
+            fontWeight: 700, fontSize: "0.68rem",
+          }}
         />
       ),
     },
     {
+      field: "createdAt",
+      headerName: "Date",
+      width: 160,
+      renderCell: (params) => {
+        if (!params?.value) return "N/A";
+        try {
+          const date = new Date(params.value);
+          date.setHours(date.getHours() - 1);
+          return (
+            <Box>
+              <Typography variant="body2">
+                {String(date.getDate()).padStart(2, "0")}{" "}
+                {date.toLocaleString("default", { month: "short" })}{" "}
+                {date.getFullYear()}
+              </Typography>
+              <Typography variant="caption" sx={{ color: textSecondary }}>
+                {String(date.getHours()).padStart(2, "0")}:{String(date.getMinutes()).padStart(2, "0")}
+              </Typography>
+            </Box>
+          );
+        } catch { return "Invalid Date"; }
+      },
+    },
+    {
+      field: "transactionId",
+      headerName: "Transaction ID",
+      width: 190,
+      renderCell: (params) => (
+        <Typography variant="body2" sx={{ fontFamily: "monospace", fontSize: "0.8rem", color: textPrimary }}>
+          {params.value}
+        </Typography>
+      ),
+    },
+    {
       field: "receiptNumber",
-      headerName: "Receipt Number",
-      width: 180,
+      headerName: "Receipt",
+      width: 160,
       renderCell: (params) =>
         params.row.receiptId ? (
-          <Link
-            to={`/receipts/${params.row.receiptId}`}
-            style={{ textDecoration: "none", color: theme.palette.greenAccent.main }}
-          >
-            {params.value}
-          </Link>
+          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+            <ReceiptIcon sx={{ fontSize: 14, color: accentGreen }} />
+            <Link
+              to={`/receipts/${params.row.receiptId}`}
+              style={{ textDecoration: "none", color: accentGreen, fontWeight: 600, fontSize: "0.82rem" }}
+            >
+              {params.value}
+            </Link>
+          </Box>
         ) : (
-          "N/A"
+          <Typography variant="caption" sx={{ color: textSecondary }}>\u2014</Typography>
         ),
     },
     {
       field: "invoiceNumber",
-      headerName: "Paid Invoice",
-      width: 200,
+      headerName: "Invoice",
+      width: 160,
       renderCell: (params) =>
         params.row.invoiceId ? (
           <Link
             to={`/get-invoice/${params.row.invoiceId}`}
-            style={{ textDecoration: "none", color: theme.palette.greenAccent.main }}
+            style={{ textDecoration: "none", color: accentBlue, fontWeight: 600, fontSize: "0.82rem" }}
           >
             {params.value}
           </Link>
         ) : (
-          "N/A"
-        ),
-    },
-    
-    
-    
-
-    {
-      field: "actions",
-      headerName: "Actions",
-      width: 100,
-      renderCell: (params) =>
-        !params.row.receipted && (
-          <IconButton
-            onClick={() => handleEditPress(params.row.id)}
-            sx={{ color: theme.palette.greenAccent.main }}
-            aria-label="Edit payment"
-          >
-            <EditIcon />
-          </IconButton>
+          <Typography variant="caption" sx={{ color: textSecondary }}>\u2014</Typography>
         ),
     },
   ];
 
   return (
-    <Box sx={{ p: 3 }}>
-      <TitleComponent title="Payments" />
-
-      <Box sx={{ display: "flex", gap: 2, mb: 3 }}>
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel id="search-type-label">Search By</InputLabel>
-          <Select
-            labelId="search-type-label"
-            value={searchType}
-            label="Search By"
-            onChange={handleSearchTypeChange}
+    <Box
+      sx={{
+        minHeight: "100vh",
+        bgcolor: surfaceBg,
+        p: { xs: 2, md: 3 },
+        display: "flex",
+        flexDirection: "column",
+        gap: 2.5,
+      }}
+    >
+      {/* Page Header */}
+      <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 2 }}>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <Box
             sx={{
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.grey[300] },
-              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.greenAccent.main },
-              "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.greenAccent.main },
-              "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-              "& .MuiSelect-select": { color: theme.palette.grey[100] },
+              width: 46, height: 46, borderRadius: 2,
+              bgcolor: alpha(accentGreen, 0.12),
+              border: `1px solid ${alpha(accentGreen, 0.2)}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
             }}
           >
-            <MenuItem value="name">Name</MenuItem>
-            <MenuItem value="transactionId">Transaction ID</MenuItem>
-            <MenuItem value="ref">Reference Number</MenuItem>
-          </Select>
-        </FormControl>
+            <PaymentsIcon sx={{ color: accentGreen, fontSize: 24 }} />
+          </Box>
+          <Box>
+            <Typography variant="h5" sx={{ fontWeight: 700, color: textPrimary, letterSpacing: "-0.01em", lineHeight: 1.2 }}>
+              Payments
+            </Typography>
+            <Typography variant="caption" sx={{ color: textSecondary }}>
+              {rowCount.toLocaleString()} total records
+            </Typography>
+          </Box>
+        </Box>
+        <Box sx={{ display: "flex", gap: 1.5 }}>
+          <Button
+            variant="outlined"
+            startIcon={<FilterListIcon />}
+            size="small"
+            sx={{
+              borderColor, color: textSecondary, textTransform: "none", fontWeight: 500, borderRadius: 1.5,
+              "&:hover": { borderColor: accentGreen, color: accentGreen, bgcolor: alpha(accentGreen, 0.06) },
+            }}
+          >
+            Filter
+          </Button>
+          <Button
+            component={Link}
+            to="/add-payment"
+            variant="contained"
+            startIcon={<AddIcon />}
+            size="small"
+            sx={{
+              bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
+              borderRadius: 1.5, px: 2,
+              boxShadow: `0 2px 10px ${alpha(accentGreen, 0.35)}`,
+              "&:hover": { bgcolor: theme.palette.greenAccent.dark || accentGreen, boxShadow: `0 4px 18px ${alpha(accentGreen, 0.45)}` },
+            }}
+          >
+            Add Payment
+          </Button>
+        </Box>
+      </Box>
+
+      {/* Summary Stats */}
+      <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
+        {[
+          { label: "Total Payments", value: rowCount.toLocaleString(), color: accentBlue },
+          { label: "Page", value: `${paginationModel.page + 1} / ${totalPages}`, color: accentGreen },
+        ].map((s) => (
+          <Paper
+            key={s.label}
+            elevation={0}
+            sx={{
+              px: 2.5, py: 1.5, borderRadius: 2,
+              border: `1px solid ${borderColor}`, bgcolor: cardBg, minWidth: 150,
+              display: "flex", flexDirection: "column", gap: 0.25,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+              {s.label}
+            </Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700, color: s.color, lineHeight: 1.3 }}>
+              {s.value}
+            </Typography>
+          </Paper>
+        ))}
+      </Box>
+
+      {/* Search & Filter Toolbar */}
+      <Paper
+        elevation={0}
+        sx={{
+          p: { xs: 1.5, md: 2 }, borderRadius: 2,
+          border: `1px solid ${borderColor}`, bgcolor: cardBg,
+          display: "flex", alignItems: "center", gap: 1.5, flexWrap: "wrap",
+        }}
+      >
+        <Select
+          value={searchType}
+          onChange={handleSearchTypeChange}
+          size="small"
+          sx={{
+            minWidth: 160, borderRadius: 1.5, fontSize: "0.85rem", color: textPrimary,
+            "& .MuiOutlinedInput-notchedOutline": { borderColor },
+            "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen },
+          }}
+        >
+          <MenuItem value="name">Name</MenuItem>
+          <MenuItem value="transactionId">Transaction ID</MenuItem>
+          <MenuItem value="ref">Reference Number</MenuItem>
+        </Select>
+
         <TextField
-          label={`Search by ${searchType === "name" ? "Name" : searchType === "transactionId" ? "Transaction ID" : "Reference Number"}`}
+          placeholder={searchPlaceholder}
           variant="outlined"
           size="small"
           value={searchQuery}
-          onChange={handleSearchChange}
+          onChange={(e) => setSearchQuery(e.target.value)}
           onKeyPress={handleKeyPress}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ color: textSecondary, fontSize: 18 }} />
+              </InputAdornment>
+            ),
+          }}
           sx={{
-            width: 400,
+            flex: "1 1 240px", maxWidth: 380,
             "& .MuiOutlinedInput-root": {
-              "& fieldset": { borderColor: theme.palette.grey[300] },
-              "&:hover fieldset": { borderColor: theme.palette.greenAccent.main },
-              "&.Mui-focused fieldset": { borderColor: theme.palette.greenAccent.main },
+              borderRadius: 1.5,
+              bgcolor: isDark ? alpha("#fff", 0.04) : alpha("#000", 0.02),
+              "& fieldset": { borderColor },
+              "&:hover fieldset": { borderColor: accentGreen },
+              "&.Mui-focused fieldset": { borderColor: accentGreen, borderWidth: 1.5 },
             },
-            "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-            "& .MuiInputBase-input": { color: theme.palette.grey[100] },
+            "& .MuiInputBase-input": { color: textPrimary, fontSize: "0.875rem" },
           }}
         />
+
         <Button
           variant="contained"
           onClick={handleSearch}
+          size="small"
           sx={{
-            bgcolor: theme.palette.greenAccent.main,
-            color: theme.palette.grey[100],
-            "&:hover": { bgcolor: theme.palette.greenAccent.dark },
-            width: 150,
+            bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
+            borderRadius: 1.5, px: 2.5, boxShadow: "none",
+            "&:hover": { bgcolor: theme.palette.greenAccent.dark || accentGreen, boxShadow: "none" },
           }}
         >
           Search
         </Button>
-        <FormControl sx={{ minWidth: 150 }}>
-          <InputLabel id="mode-filter-label">Payment Mode</InputLabel>
-          <Select
-            labelId="mode-filter-label"
-            value={modeFilter}
-            label="Payment Mode"
-            onChange={handleModeFilterChange}
-            sx={{
-              "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.grey[300] },
-              "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.greenAccent.main },
-              "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.greenAccent.main },
-              "& .MuiInputLabel-root": { color: theme.palette.grey[100] },
-              "& .MuiSelect-select": { color: theme.palette.grey[100] },
-            }}
-          >
-            <MenuItem value="all">All</MenuItem>
-            <MenuItem value="CASH">Cash</MenuItem>
-            <MenuItem value="MPESA">M-Pesa</MenuItem>
-            <MenuItem value="BANK_TRANSFER">Bank Transfer</MenuItem>
-          </Select>
-        </FormControl>
-        <Button
-          variant={showUnreceiptedOnly ? "contained" : "outlined"}
-          onClick={handleFilterUnreceipted}
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 0.5, borderColor }} />
+
+        <Select
+          value={modeFilter}
+          onChange={handleModeFilterChange}
+          size="small"
+          displayEmpty
           sx={{
-            bgcolor: showUnreceiptedOnly ? "#ff9800" : "transparent",
-            color: showUnreceiptedOnly ? theme.palette.grey[100] : "#ff9800",
-            borderColor: "#ff9800",
-            "&:hover": { bgcolor: showUnreceiptedOnly ? "#f57c00" : "#ff980033" },
+            minWidth: 150, borderRadius: 1.5, fontSize: "0.85rem", color: textPrimary,
+            "& .MuiOutlinedInput-notchedOutline": { borderColor },
+            "&:hover .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen },
+            "&.Mui-focused .MuiOutlinedInput-notchedOutline": { borderColor: accentGreen },
           }}
         >
-          {showUnreceiptedOnly ? "Show All Payments" : "Show Unreceipted Only"}
-        </Button>
-      </Box>
+          <MenuItem value="all">All Modes</MenuItem>
+          <MenuItem value="CASH">Cash</MenuItem>
+          <MenuItem value="MPESA">M-Pesa</MenuItem>
+          <MenuItem value="BANK_TRANSFER">Bank Transfer</MenuItem>
+        </Select>
 
-      {loading ? (
-        <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "50vh" }}>
-          <CircularProgress size={70} sx={{ color: theme.palette.greenAccent.main }} />
-        </Box>
-      ) : (
-        <DataGrid
-          rows={payments}
-          columns={columns}
-          loading={loading}
-          getRowId={(row) => row.id}
-          paginationMode="server"
-          rowCount={rowCount}
-          paginationModel={paginationModel}
-          onPaginationModelChange={setPaginationModel}
-          pageSizeOptions={[10, 20, 50]}
-          disableSelectionOnClick
+        <ToggleButton
+          value="unreceipted"
+          selected={showUnreceiptedOnly}
+          onChange={handleFilterUnreceipted}
+          size="small"
           sx={{
-            bgcolor: theme.palette.background.paper,
-            "& .MuiDataGrid-columnHeaders": {
-              bgcolor: theme.palette.primary.main,
-              color: theme.palette.grey[100],
-            },
-            "& .MuiDataGrid-cell": { color: theme.palette.grey[100] },
-            ml: "auto",
-            mr: "auto",
-            maxWidth: "100%",
+            borderRadius: 1.5,
+            border: `1px solid ${showUnreceiptedOnly ? "#ff9800" : borderColor}`,
+            color: showUnreceiptedOnly ? "#ff9800" : textSecondary,
+            bgcolor: showUnreceiptedOnly ? alpha("#ff9800", 0.1) : "transparent",
+            textTransform: "none", fontWeight: 600, fontSize: "0.8rem", px: 1.5,
+            "&:hover": { bgcolor: alpha("#ff9800", 0.12), borderColor: "#ff9800", color: "#ff9800" },
+            "&.Mui-selected": { bgcolor: alpha("#ff9800", 0.12), color: "#ff9800", borderColor: "#ff9800" },
+            "&.Mui-selected:hover": { bgcolor: alpha("#ff9800", 0.18) },
           }}
-          components={{
-            Toolbar: () => (
-              <GridToolbarContainer>
-                <GridToolbarExport />
-              </GridToolbarContainer>
-            ),
+        >
+          {showUnreceiptedOnly ? "Unreceipted Only \u2713" : "Unreceipted Only"}
+        </ToggleButton>
+      </Paper>
+
+      {/* Data Table */}
+      <Paper
+        elevation={0}
+        sx={{
+          flex: 1, borderRadius: 2, border: `1px solid ${borderColor}`,
+          bgcolor: cardBg, overflow: "hidden",
+          display: "flex", flexDirection: "column", minHeight: 520,
+        }}
+      >
+        <Box
+          sx={{
+            px: 2.5, py: 1.5, bgcolor: headerBg,
+            borderBottom: `1px solid ${borderColor}`,
+            display: "flex", alignItems: "center", justifyContent: "space-between",
           }}
-        />
-      )}
-      {!loading && (
-        <Typography sx={{ textAlign: "center", mt: 2, color: theme.palette.grey[100] }}>
-          Page {paginationModel.page + 1} of {Math.ceil(rowCount / paginationModel.pageSize) || 1}
-        </Typography>
-      )}
+        >
+          <Typography variant="subtitle2" sx={{ fontWeight: 700, color: textPrimary, letterSpacing: "0.02em" }}>
+            Payment Records
+          </Typography>
+          {!loading && (
+            <Chip
+              label={`${rowCount.toLocaleString()} payments`}
+              size="small"
+              sx={{ bgcolor: alpha(accentGreen, 0.12), color: accentGreen, fontWeight: 600, fontSize: "0.7rem", height: 22 }}
+            />
+          )}
+        </Box>
+
+        {loading ? (
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 2, py: 10 }}>
+            <CircularProgress size={44} thickness={4} sx={{ color: accentGreen }} />
+            <Typography variant="body2" sx={{ color: textSecondary }}>Loading payments\u2026</Typography>
+          </Box>
+        ) : error && payments.length === 0 ? (
+          <Box sx={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", flex: 1, gap: 1.5, py: 10 }}>
+            <ErrorOutlineIcon sx={{ color: "#f44336", fontSize: 48 }} />
+            <Typography variant="body1" sx={{ color: "#f44336", fontWeight: 600 }}>{error}</Typography>
+            <Button
+              variant="outlined" size="small"
+              onClick={() => fetchPayments(paginationModel.page, paginationModel.pageSize, modeFilter, showUnreceiptedOnly)}
+              sx={{ borderColor: accentGreen, color: accentGreen, textTransform: "none", mt: 1, borderRadius: 1.5, "&:hover": { bgcolor: alpha(accentGreen, 0.08) } }}
+            >
+              Retry
+            </Button>
+          </Box>
+        ) : (
+          <DataGrid
+            rows={payments}
+            columns={columns}
+            loading={loading}
+            getRowId={(row) => row.id}
+            paginationMode="server"
+            rowCount={rowCount}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[10, 20, 50]}
+            disableSelectionOnClick
+            rowHeight={62}
+            components={{
+              Toolbar: () => (
+                <GridToolbarContainer sx={{ px: 2, py: 0.5, borderBottom: `1px solid ${borderColor}` }}>
+                  <GridToolbarExport sx={{ color: textSecondary, fontSize: "0.8rem", textTransform: "none" }} />
+                </GridToolbarContainer>
+              ),
+            }}
+            sx={{
+              border: "none",
+              color: textPrimary,
+              flex: 1,
+              "& .MuiDataGrid-columnHeaders": {
+                bgcolor: headerBg,
+                borderBottom: `1px solid ${borderColor}`,
+                minHeight: "44px !important",
+                maxHeight: "44px !important",
+              },
+              "& .MuiDataGrid-columnHeaderTitle": {
+                fontWeight: 700,
+                fontSize: "0.72rem",
+                textTransform: "uppercase",
+                letterSpacing: "0.06em",
+                color: textSecondary,
+              },
+              "& .MuiDataGrid-row": {
+                borderBottom: `1px solid ${borderColor}`,
+                cursor: "pointer",
+                transition: "background 0.15s ease",
+                "&:hover": { bgcolor: isDark ? alpha("#fff", 0.035) : alpha("#000", 0.018) },
+                "&.Mui-selected": {
+                  bgcolor: alpha(accentGreen, 0.08),
+                  "&:hover": { bgcolor: alpha(accentGreen, 0.12) },
+                },
+              },
+              "& .MuiDataGrid-cell": {
+                borderBottom: "none",
+                display: "flex",
+                alignItems: "center",
+                fontSize: "0.85rem",
+                overflow: "hidden",
+              },
+              "& .MuiDataGrid-footerContainer": {
+                bgcolor: headerBg,
+                borderTop: `1px solid ${borderColor}`,
+                color: textPrimary,
+                minHeight: 48,
+              },
+              "& .MuiCheckbox-root": { color: textSecondary },
+              "& .MuiDataGrid-columnSeparator": { color: borderColor },
+              "& .MuiTablePagination-root": { color: textPrimary },
+              "& .MuiTablePagination-selectIcon": { color: textSecondary },
+              "& .MuiTablePagination-actions button": { color: textSecondary },
+              "& .MuiDataGrid-virtualScroller": {
+                "&::-webkit-scrollbar": { width: 6, height: 6 },
+                "&::-webkit-scrollbar-track": { bgcolor: "transparent" },
+                "&::-webkit-scrollbar-thumb": {
+                  bgcolor: isDark ? "rgba(255,255,255,0.12)" : "rgba(0,0,0,0.14)",
+                  borderRadius: 3,
+                },
+              },
+            }}
+          />
+        )}
+      </Paper>
 
       <Snackbar
         open={openSnackbar}

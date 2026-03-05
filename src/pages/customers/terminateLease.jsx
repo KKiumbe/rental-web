@@ -1,5 +1,5 @@
 import React, { useEffect, useState, Component } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, useLocation } from "react-router-dom";
 import {
   Container,
   Typography,
@@ -76,9 +76,12 @@ const DetailsStep = ({ form, setForm, errors, setErrors }) => {
 
   return (
     <Box>
+      <Alert severity="info" sx={{ mb: 2 }}>
+        A lease document is <strong>not required</strong> to end a lease. Fill in the details below and proceed.
+      </Alert>
       <LocalizationProvider dateAdapter={AdapterDateFns}>
         <DatePicker
-          label="Termination Date"
+          label="Vacate Date (optional)"
           value={form.terminationDate}
           onChange={handleDateChange}
           renderInput={(params) => (
@@ -87,16 +90,15 @@ const DetailsStep = ({ form, setForm, errors, setErrors }) => {
               fullWidth
               margin="normal"
               error={!!errors.terminationDate}
-              helperText={errors.terminationDate}
+              helperText={errors.terminationDate || "Leave blank to use today's date"}
             />
           )}
-          minDate={new Date()}
         />
       </LocalizationProvider>
 
       <TextField
         fullWidth
-        label="Reason for Termination"
+        label="Reason for Ending Lease"
         name="reason"
         value={form.reason}
         onChange={handleChange}
@@ -595,15 +597,21 @@ const VacatedStep = ({ form }) => (
 const TerminateLease = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const currentUser = useAuthStore((state) => state.currentUser);
   const theme = getTheme();
+
+  // Pick up optional pre-filled values passed from customerDetails navigate state
+  const navState = location.state || {};
+  const navUnitId = navState.unitId || "";
 
   const [customer, setCustomer] = useState(null);
   const [activeStep, setActiveStep] = useState(0);
   const [form, setForm] = useState({
     customerId: id,
-    terminationDate: null,
-    reason: "",
+    unitId: navUnitId,
+    terminationDate: navState.terminationDate ? new Date(navState.terminationDate) : null,
+    reason: navState.reason || "",
     notes: "",
     media: [],
     damages: [],
@@ -622,15 +630,13 @@ const TerminateLease = () => {
     }
   }, [currentUser, navigate]);
 
-  // Validate id and log customerId and currentUser
+  // Validate id
   useEffect(() => {
     if (!id) {
       setError("Invalid customer ID.");
       setLoading(false);
     }
-    console.log("Current form.customerId:", form.customerId);
-    console.log("Current user:", currentUser);
-  }, [id, form.customerId, currentUser]);
+  }, [id]);
 
   // Fetch customer and saved progress
   useEffect(() => {
@@ -646,31 +652,42 @@ const TerminateLease = () => {
           api.get(`/customer-details/${id}`),
           api.get(`/lease-termination-progress/${id}`),
         ]);
-        console.log("Customer response:", customerResponse.data);
         setCustomer(customerResponse.data);
         const progress = progressResponse.data;
         if (progress && Object.keys(progress).length > 0) {
-          setForm({
+          setForm((prev) => ({
+            ...prev,
             customerId: id,
-            terminationDate: progress.terminationDate ? new Date(progress.terminationDate) : null,
-            reason: progress.reason || "",
+            unitId: prev.unitId || navUnitId,
+            terminationDate: progress.terminationDate ? new Date(progress.terminationDate) : prev.terminationDate,
+            reason: progress.reason || prev.reason || "",
             notes: progress.notes || "",
             media: progress.media || [],
             damages: progress.damages || [],
             invoices: progress.invoices || [],
-          });
+          }));
           const stepIndex = stages.findIndex((stage) => stage.key === progress.stage);
           setActiveStep(stepIndex !== -1 ? stepIndex : 0);
         }
       } catch (err) {
         console.error("Error fetching data:", err);
-        setError(err.response?.data?.message || "Failed to load data.");
+        // Non-fatal: progress fetch may 404 on a fresh termination
+        if (err.response?.status !== 404) {
+          setError(err.response?.data?.message || "Failed to load data.");
+        }
+        // Still try to load customer alone
+        try {
+          const customerResponse = await api.get(`/customer-details/${id}`);
+          setCustomer(customerResponse.data);
+        } catch (innerErr) {
+          setError(innerErr.response?.data?.message || "Failed to load customer.");
+        }
       } finally {
         setLoading(false);
       }
     };
     fetchData();
-  }, [id, currentUser]);
+  }, [id, currentUser, navUnitId]);
 
   // Save progress when changing stages
   const saveProgress = async (newStep) => {
@@ -682,6 +699,7 @@ const TerminateLease = () => {
     try {
       await api.post(`/lease-termination-progress/${id}`, {
         customerId: id,
+        unitId: form.unitId,
         stage: stages[newStep].key,
         terminationDate: form.terminationDate?.toISOString(),
         reason: form.reason,
@@ -692,26 +710,41 @@ const TerminateLease = () => {
       });
     } catch (err) {
       console.error("Error saving progress:", err);
-      setError(err.response?.data?.message || "Failed to save progress.");
       setSnackbar({ open: true, message: "Failed to save progress." });
     }
   };
 
-  // Validate form (only for Stage 1 if not skipped)
+  // Validate form — terminationDate and reason are optional
   const validateForm = () => {
-    const newErrors = {};
-    if (activeStep === 0 && form.terminationDate && !form.reason.trim()) {
-      newErrors.reason = "Reason is required if termination date is provided";
-    }
-    return newErrors;
+    return {};
   };
 
-  // Handle next step
+  // Handle next step — on step 0 call initiate endpoint first
   const handleNext = async () => {
     const validationErrors = validateForm();
     if (Object.keys(validationErrors).length > 0) {
       setErrors(validationErrors);
       return;
+    }
+
+    if (activeStep === 0) {
+      // Initiate the lease termination on the backend
+      setSubmitting(true);
+      try {
+        await api.post(`/initiate-lease-termination/${id}`, {
+          unitId: form.unitId,
+          terminationDate: form.terminationDate?.toISOString() || null,
+          reason: form.reason || null,
+          notes: form.notes || null,
+        });
+      } catch (err) {
+        console.error("Error initiating lease termination:", err);
+        setSnackbar({ open: true, message: err.response?.data?.message || "Failed to initiate lease termination." });
+        setSubmitting(false);
+        return;
+      } finally {
+        setSubmitting(false);
+      }
     }
 
     const newStep = activeStep + 1;
@@ -744,6 +777,7 @@ const TerminateLease = () => {
     try {
       await api.post(`/terminate-lease/${id}`, {
         customerId: id,
+        unitId: form.unitId,
         terminationDate: form.terminationDate?.toISOString(),
         reason: form.reason,
         notes: form.notes,
@@ -767,7 +801,7 @@ const TerminateLease = () => {
 
   // Handle back navigation
   const handleBack = () => {
-    navigate(`/customer/${id}`);
+    navigate(`/customer-details/${id}`);
   };
 
   // Handle Snackbar close
@@ -783,7 +817,7 @@ const TerminateLease = () => {
             <ArrowBackIcon sx={{ fontSize: 30 }} />
           </IconButton>
           <Typography variant="h4">
-            Terminate Lease{customer ? ` for ${customer.fullName}` : ""}
+            End Lease{customer ? ` — ${customer.fullName || customer.firstName + " " + customer.lastName}` : ""}
           </Typography>
         </Box>
 

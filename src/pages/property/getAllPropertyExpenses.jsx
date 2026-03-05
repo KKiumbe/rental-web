@@ -113,7 +113,7 @@ const ExpensesScreen = () => {
   const navigate = useNavigate();
   const theme = getTheme();
 
-  const BASE_URL = import.meta.env.VITE_BASE_URL || 'https://taqa.co.ke/api';
+  const BASE_URL = import.meta.env.VITE_BASE_URL;
 
   useEffect(() => {
     if (!currentUser) {
