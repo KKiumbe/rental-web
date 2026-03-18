@@ -20,6 +20,7 @@ import {
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import DownloadIcon from "@mui/icons-material/Download";
+import PrintIcon from "@mui/icons-material/Print";
 import SearchIcon from "@mui/icons-material/Search";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import AddIcon from "@mui/icons-material/Add";
@@ -91,6 +92,7 @@ const Receipts = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState("name");
   const [downloadingId, setDownloadingId] = useState(null);
+  const [printingId, setPrintingId] = useState(null);
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -121,6 +123,30 @@ const Receipts = () => {
     if (reason === "clickaway") return;
     setOpenSnackbar(false);
     setError(null);
+  };
+
+  const handlePrintReceipt = async (receiptId) => {
+    setPrintingId(receiptId);
+    try {
+      const response = await axios.get(`${BASEURL}/download-receipt/${receiptId}`, {
+        responseType: "blob",
+        withCredentials: true,
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data], { type: "application/pdf" }));
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.addEventListener("load", () => { printWindow.focus(); printWindow.print(); });
+      } else {
+        setError("Print window blocked. Please allow popups for this site.");
+        setOpenSnackbar(true);
+      }
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to print receipt");
+      setOpenSnackbar(true);
+    } finally {
+      setPrintingId(null);
+    }
   };
 
   const handleDownloadReceipt = async (receiptId, receiptNumber) => {
@@ -240,7 +266,7 @@ const Receipts = () => {
     {
       field: "view",
       headerName: "Actions",
-      width: 110,
+      width: 140,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
@@ -254,6 +280,20 @@ const Receipts = () => {
             >
               <VisibilityIcon fontSize="small" />
             </IconButton>
+          </Tooltip>
+          <Tooltip title="Print Receipt">
+            <span>
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); handlePrintReceipt(params.row.id); }}
+                disabled={printingId === params.row.id}
+                sx={{ color: accentGreen, "&:hover": { bgcolor: alpha(accentGreen, 0.1) } }}
+              >
+                {printingId === params.row.id
+                  ? <CircularProgress size={14} />
+                  : <PrintIcon fontSize="small" />}
+              </IconButton>
+            </span>
           </Tooltip>
           <Tooltip title="Download Receipt">
             <span>
