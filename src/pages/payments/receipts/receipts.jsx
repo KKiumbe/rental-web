@@ -19,6 +19,7 @@ import {
   MenuItem,
 } from "@mui/material";
 import VisibilityIcon from "@mui/icons-material/Visibility";
+import DownloadIcon from "@mui/icons-material/Download";
 import SearchIcon from "@mui/icons-material/Search";
 import ReceiptLongIcon from "@mui/icons-material/ReceiptLong";
 import AddIcon from "@mui/icons-material/Add";
@@ -89,6 +90,7 @@ const Receipts = () => {
   const [rowCount, setRowCount] = useState(0);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchType, setSearchType] = useState("name");
+  const [downloadingId, setDownloadingId] = useState(null);
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -119,6 +121,29 @@ const Receipts = () => {
     if (reason === "clickaway") return;
     setOpenSnackbar(false);
     setError(null);
+  };
+
+  const handleDownloadReceipt = async (receiptId, receiptNumber) => {
+    setDownloadingId(receiptId);
+    try {
+      const response = await axios.get(`${BASEURL}/download-receipt/${receiptId}`, {
+        responseType: "blob",
+        withCredentials: true,
+      });
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `receipt-${receiptNumber}.pdf`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err.response?.data?.message || "Failed to download receipt");
+      setOpenSnackbar(true);
+    } finally {
+      setDownloadingId(null);
+    }
   };
 
   const fetchAllReceipts = async (page, pageSize) => {
@@ -215,7 +240,7 @@ const Receipts = () => {
     {
       field: "view",
       headerName: "Actions",
-      width: 90,
+      width: 110,
       sortable: false,
       filterable: false,
       renderCell: (params) => (
@@ -229,6 +254,20 @@ const Receipts = () => {
             >
               <VisibilityIcon fontSize="small" />
             </IconButton>
+          </Tooltip>
+          <Tooltip title="Download Receipt">
+            <span>
+              <IconButton
+                size="small"
+                onClick={(e) => { e.stopPropagation(); handleDownloadReceipt(params.row.id, params.row.receiptNumber); }}
+                disabled={downloadingId === params.row.id}
+                sx={{ color: accentGreen, "&:hover": { bgcolor: alpha(accentGreen, 0.1) } }}
+              >
+                {downloadingId === params.row.id
+                  ? <CircularProgress size={14} />
+                  : <DownloadIcon fontSize="small" />}
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
       ),
