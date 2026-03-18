@@ -72,6 +72,13 @@ const reportData = {
       endpoint: `${BASEURL}/reports/income-per-landlord`,
     },
   ],
+  arrears: [
+    {
+      name: 'Tenant Arrears per Building',
+      description: 'Outstanding balances grouped by building — shows each tenant\'s billed, paid, and arrears amounts',
+      endpoint: `${BASEURL}/reports/arrears-per-building`,
+    },
+  ],
 };
 
 const ReportScreen = () => {
@@ -194,6 +201,7 @@ const ReportScreen = () => {
   <Tab label="Invoices" />
   <Tab label="Payments" />
   <Tab label="Landlord Summaries" />
+  <Tab label="Arrears" />
 </Tabs>
 
         <Box sx={{ mt: 2 }}>
@@ -201,6 +209,7 @@ const ReportScreen = () => {
           {activeTab === 1 && renderTabContent(reportData.invoices)}
           {activeTab === 2 && renderTabContent(reportData.payments)}
           {activeTab === 3 && renderTabContent(reportData.landlordSummaries)}
+          {activeTab === 4 && renderTabContent(reportData.arrears)}
         </Box>
       </Box>
       <Snackbar
