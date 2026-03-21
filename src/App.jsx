@@ -52,6 +52,7 @@ import AddPropertyScreen from "./pages/property/addProperty";
 import AddUnitScreen from "./pages/property/addUnit";
 import CreateWaterReading from "./pages/meterReadings/addReadings";
 import ExpensesScreen from "./pages/property/getAllPropertyExpenses";
+import WaterOnlyCustomers from "./pages/waterOnlyCustomers/waterOnlyCustomers";
 
 const App = () => {
   const { darkMode } = useThemeStore();
@@ -454,6 +455,14 @@ const App = () => {
                 
 
 
+                <Route
+                  path="/water-only-customers"
+                  element={
+                    <ProtectedRoute>
+                      <WaterOnlyCustomers />
+                    </ProtectedRoute>
+                  }
+                />
               </Routes>
             </Box>
           </Box>
