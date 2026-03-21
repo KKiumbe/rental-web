@@ -294,8 +294,15 @@ const WaterOnlyCustomers = () => {
       flex: 1,
       minWidth: 120,
       // valueGetter needed so CSV export works (renderCell alone doesn't affect export)
-      valueGetter: (value, row) => row.currentReading - row.previousReading,
-      renderCell: ({ row }) => `${row.currentReading - row.previousReading} m³`,
+      valueGetter: (value, row) =>
+        row.currentReading != null && row.previousReading != null
+          ? row.currentReading - row.previousReading
+          : null,
+      renderCell: ({ row }) => {
+        const c = row.currentReading;
+        const p = row.previousReading;
+        return c != null && p != null ? `${c - p} m³` : '—';
+      },
     },
     {
       field: "closingBalance",
