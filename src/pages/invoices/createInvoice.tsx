@@ -583,7 +583,6 @@ const CreateInvoice = () => {
               label="Billing Period"
               value={selectedPeriod}
               onChange={(v: Date | null | undefined) => setSelectedPeriod(v ?? null)}
-              maxDate={new Date()}
               slotProps={{
                 textField: {
                   size: "small",
