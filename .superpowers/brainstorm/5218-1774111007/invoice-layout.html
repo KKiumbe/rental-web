@@ -1,0 +1,186 @@
+<h2>Invoice PDF — Layout Options</h2>
+<p class="subtitle">3 changes to review: invoice number, period label, and the reminder notice</p>
+
+<div class="cards">
+
+  <!-- Option A -->
+  <div class="card" data-choice="a" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>A — Compact number · Period in header · Notice right-aligned</h3>
+      <p>Invoice number trimmed to 5 digits (e.g. <strong>INV-00042</strong>). Period column reads <strong>"April Rent"</strong>. Penalty notice sits on the right of the same row as the period label, flush-right.</p>
+    </div>
+    <div class="card-image" style="padding:16px;background:#fafafa;border-top:1px solid #eee">
+      <!-- Mini invoice mockup -->
+      <div style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;border:1px solid #ddd;padding:14px;background:#fff;border-radius:4px">
+
+        <!-- Title row -->
+        <div style="text-align:center;font-weight:bold;font-size:14px;margin-bottom:6px;letter-spacing:2px">INVOICE</div>
+        <div style="border-top:1px solid #ccc;margin-bottom:8px"></div>
+
+        <!-- Meta row -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">INVOICE NO.</div>
+            <div style="font-weight:bold">INV-00042</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PERIOD</div>
+            <div style="font-weight:bold">April Rent</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">DATE ISSUED</div>
+            <div>01 Apr 2026</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">STATUS</div>
+            <div style="color:#c0392b;font-weight:bold">Unpaid</div>
+          </div>
+        </div>
+
+        <!-- Billed to / Property row -->
+        <div style="display:flex;gap:40px;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">BILLED TO</div>
+            <div>John Doe</div>
+            <div style="color:#555">0712 345 678</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PROPERTY</div>
+            <div style="font-weight:bold">Sunset Apartments</div>
+            <div style="color:#555">Unit A3</div>
+          </div>
+        </div>
+
+        <!-- Penalty notice: left label + right text on same row -->
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#fff8e1;padding:6px 8px;border-radius:3px;margin-bottom:8px">
+          <span style="font-weight:bold;color:#7c4a00;font-size:9px">April Rent</span>
+          <span style="color:#7c4a00;font-size:8px;text-align:right">⚠ IMPORTANT: Please clear your rent before the 5th of every month to avoid penalties.</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Option B -->
+  <div class="card" data-choice="b" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>B — Compact number · Period as subtitle · Full-width notice</h3>
+      <p>Invoice number is <strong>INV-00042</strong>. A subtitle line under "INVOICE" reads <strong>"April Rent"</strong> prominently. Penalty notice stays as a full-width yellow bar (current style).</p>
+    </div>
+    <div class="card-image" style="padding:16px;background:#fafafa;border-top:1px solid #eee">
+      <div style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;border:1px solid #ddd;padding:14px;background:#fff;border-radius:4px">
+
+        <!-- Title row with subtitle -->
+        <div style="text-align:center;margin-bottom:2px">
+          <div style="font-weight:bold;font-size:14px;letter-spacing:2px">INVOICE</div>
+          <div style="font-size:11px;color:#555;font-weight:bold;margin-top:2px">April Rent</div>
+        </div>
+        <div style="border-top:1px solid #ccc;margin:6px 0 8px"></div>
+
+        <!-- Meta row -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">INVOICE NO.</div>
+            <div style="font-weight:bold">INV-00042</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PERIOD</div>
+            <div>April 2026</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">DATE ISSUED</div>
+            <div>01 Apr 2026</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">STATUS</div>
+            <div style="color:#c0392b;font-weight:bold">Unpaid</div>
+          </div>
+        </div>
+
+        <!-- Billed to / Property row -->
+        <div style="display:flex;gap:40px;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">BILLED TO</div>
+            <div>John Doe</div>
+            <div style="color:#555">0712 345 678</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PROPERTY</div>
+            <div style="font-weight:bold">Sunset Apartments</div>
+            <div style="color:#555">Unit A3</div>
+          </div>
+        </div>
+
+        <!-- Full-width penalty notice -->
+        <div style="background:#fff8e1;padding:6px 8px;border-radius:3px;margin-bottom:8px">
+          <span style="font-weight:bold;color:#7c4a00;font-size:9px">⚠ IMPORTANT: </span>
+          <span style="color:#7c4a00;font-size:8px">Please clear your rent before the 5th of every month to avoid penalties.</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Option C -->
+  <div class="card" data-choice="c" onclick="toggleSelect(this)">
+    <div class="card-body">
+      <h3>C — Compact number · Period label left · Notice right on same bar</h3>
+      <p>Invoice number is <strong>INV-00042</strong>. The PERIOD column reads <strong>"April Rent"</strong>. Below the charges, a single bar shows <strong>"April Rent"</strong> on the left and the penalty reminder on the right — exactly as described.</p>
+    </div>
+    <div class="card-image" style="padding:16px;background:#fafafa;border-top:1px solid #eee">
+      <div style="font-family:Arial,sans-serif;font-size:11px;color:#1a1a1a;border:1px solid #ddd;padding:14px;background:#fff;border-radius:4px">
+
+        <!-- Title row -->
+        <div style="text-align:center;font-weight:bold;font-size:14px;margin-bottom:6px;letter-spacing:2px">INVOICE</div>
+        <div style="border-top:1px solid #ccc;margin-bottom:8px"></div>
+
+        <!-- Meta row -->
+        <div style="display:flex;justify-content:space-between;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">INVOICE NO.</div>
+            <div style="font-weight:bold">INV-00042</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PERIOD</div>
+            <div style="font-weight:bold">April Rent</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">DATE ISSUED</div>
+            <div>01 Apr 2026</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">STATUS</div>
+            <div style="color:#c0392b;font-weight:bold">Unpaid</div>
+          </div>
+        </div>
+
+        <!-- Billed to / Property -->
+        <div style="display:flex;gap:40px;margin-bottom:12px">
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">BILLED TO</div>
+            <div>John Doe</div>
+            <div style="color:#555">0712 345 678</div>
+          </div>
+          <div>
+            <div style="font-size:8px;color:#777;font-weight:bold">PROPERTY</div>
+            <div style="font-weight:bold">Sunset Apartments</div>
+            <div style="color:#555">Unit A3</div>
+          </div>
+        </div>
+
+        <!-- Charges stub -->
+        <div style="background:#e8edf5;padding:4px 6px;font-weight:bold;font-size:8px;color:#333;margin-bottom:2px">CHARGES TABLE …</div>
+
+        <!-- Two-column notice bar -->
+        <div style="display:flex;align-items:center;justify-content:space-between;background:#fff8e1;padding:7px 10px;border-radius:3px;margin-top:8px">
+          <span style="font-weight:bold;color:#7c4a00;font-size:10px">April Rent</span>
+          <span style="color:#7c4a00;font-size:8px;max-width:65%;text-align:right">⚠ IMPORTANT: Please clear your rent before the 5th of every month to avoid penalties.</span>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<p class="subtitle" style="margin-top:20px">Click to select — or just tell me in the terminal what you prefer.</p>
