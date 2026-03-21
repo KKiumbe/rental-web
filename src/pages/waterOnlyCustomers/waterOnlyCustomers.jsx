@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import {
   Box,
   Button,
@@ -26,6 +26,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import axios from "axios";
 import { format, parseISO } from "date-fns";
 import AddIcon from "@mui/icons-material/Add";
+import PeopleAltIcon from "@mui/icons-material/PeopleAlt";
+import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutline";
+import PauseCircleOutlineIcon from "@mui/icons-material/PauseCircleOutline";
+import HourglassEmptyIcon from "@mui/icons-material/HourglassEmpty";
 import TitleComponent from "../../components/title";
 
 const BASE_URL = import.meta.env.VITE_BASE_URL;
@@ -116,7 +120,7 @@ const WaterOnlyCustomers = () => {
   }, [searchParams, setSearchParams]);
 
   // ── Fetch customers ─────────────────────────────────────────────────────
-  const fetchCustomers = async () => {
+  const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
       const res = await axios.get(`${BASE_URL}/water-only-customers`, {
@@ -136,11 +140,11 @@ const WaterOnlyCustomers = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [navigate]);
 
   useEffect(() => {
     fetchCustomers();
-  }, []);
+  }, [fetchCustomers]);
 
   // ── Derived stat card values ─────────────────────────────────────────────
   const stats = useMemo(
@@ -236,7 +240,7 @@ const WaterOnlyCustomers = () => {
   };
 
   // ── DataGrid columns ─────────────────────────────────────────────────────
-  const columns = [
+  const columns = useMemo(() => [
     {
       field: "name",
       headerName: "Name",
@@ -275,14 +279,14 @@ const WaterOnlyCustomers = () => {
       headerName: "Prev. Reading",
       flex: 1,
       minWidth: 120,
-      renderCell: ({ value }) => `${value} m³`,
+      renderCell: ({ value }) => value != null ? `${value} m³` : '—',
     },
     {
       field: "currentReading",
       headerName: "Curr. Reading",
       flex: 1,
       minWidth: 120,
-      renderCell: ({ value }) => `${value} m³`,
+      renderCell: ({ value }) => value != null ? `${value} m³` : '—',
     },
     {
       field: "consumption",
@@ -307,7 +311,7 @@ const WaterOnlyCustomers = () => {
             : theme.palette.text.primary;
         return (
           <Typography variant="body2" sx={{ color, fontWeight: 600 }}>
-            {value}
+            {value != null ? Number(value).toLocaleString() : '—'}
           </Typography>
         );
       },
@@ -350,7 +354,7 @@ const WaterOnlyCustomers = () => {
         }
       },
     },
-  ];
+  ], [theme]);
 
   // ── Render ───────────────────────────────────────────────────────────────
   return (
@@ -370,10 +374,10 @@ const WaterOnlyCustomers = () => {
 
       {/* Stat cards */}
       <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap", px: 3, mb: 3 }}>
-        <StatCard label="Total Customers" value={stats.total} color="#1976d2" icon={<span>👥</span>} />
-        <StatCard label="Active" value={stats.active} color="#388e3c" icon={<span>✅</span>} />
-        <StatCard label="Inactive" value={stats.inactive} color="#757575" icon={<span>⏸️</span>} />
-        <StatCard label="Pending" value={stats.pending} color="#f57c00" icon={<span>⏳</span>} />
+        <StatCard label="Total Customers" value={stats.total} color="#1976d2" icon={<PeopleAltIcon />} />
+        <StatCard label="Active" value={stats.active} color="#388e3c" icon={<CheckCircleOutlineIcon />} />
+        <StatCard label="Inactive" value={stats.inactive} color="#757575" icon={<PauseCircleOutlineIcon />} />
+        <StatCard label="Pending" value={stats.pending} color="#f57c00" icon={<HourglassEmptyIcon />} />
       </Box>
 
       {/* DataGrid */}
