@@ -16,12 +16,16 @@ import {
   Snackbar,
   Alert,
   Container,
+  TextField,
 } from '@mui/material';
 import axios from 'axios';
 import { useAuthStore } from '../../store/authStore';
 import { useNavigate } from 'react-router-dom';
 import { getTheme } from '../../store/theme';
 import TitleComponent from '../../components/title';
+import { LocalizationProvider } from '@mui/x-date-pickers';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 
 const BASEURL = import.meta.env.VITE_BASE_URL;
 
@@ -103,9 +107,17 @@ const ReportScreen = () => {
   const [downloading, setDownloading] = useState({});
   const [progress, setProgress] = useState({});
   const [notification, setNotification] = useState({ open: false, message: '', severity: 'success' });
+  const [buildingBillPeriod, setBuildingBillPeriod] = useState(new Date());
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
   const theme = getTheme();
+
+  const formatPeriod = (date) => {
+    if (!date) return undefined;
+    const y = date.getFullYear();
+    const m = String(date.getMonth() + 1).padStart(2, '0');
+    return `${y}-${m}`;
+  };
 
   useEffect(() => {
     if (!currentUser) {
@@ -117,12 +129,13 @@ const ReportScreen = () => {
     setActiveTab(newValue);
   };
 
-  const handleDownload = async (endpoint, reportName) => {
+  const handleDownload = async (endpoint, reportName, params = {}) => {
     setDownloading((prev) => ({ ...prev, [endpoint]: true }));
     setProgress((prev) => ({ ...prev, [endpoint]: 0 }));
 
     try {
       const response = await axios.get(endpoint, {
+        params,
         responseType: 'blob',
         withCredentials: true,
         onDownloadProgress: (progressEvent) => {
@@ -190,6 +203,75 @@ const ReportScreen = () => {
     </TableContainer>
   );
 
+  const renderBuildingBillsTab = () => (
+    <Box>
+      <Paper variant="outlined" sx={{ p: 2, mb: 2, display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Typography variant="body2" sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}>
+          Billing Period:
+        </Typography>
+        <LocalizationProvider dateAdapter={AdapterDateFns}>
+          <DatePicker
+            views={['year', 'month']}
+            label="Year / Month"
+            value={buildingBillPeriod}
+            onChange={(v) => setBuildingBillPeriod(v)}
+            renderInput={(params) => (
+              <TextField {...params} size="small" sx={{ width: 200 }} />
+            )}
+          />
+        </LocalizationProvider>
+        <Typography variant="caption" color="text.secondary">
+          {buildingBillPeriod
+            ? `Reports will be generated for ${buildingBillPeriod.toLocaleString('default', { month: 'long', year: 'numeric' })}`
+            : 'Select a period'}
+        </Typography>
+      </Paper>
+
+      <TableContainer component={Paper}>
+        <Table>
+          <TableHead>
+            <TableRow>
+              <TableCell>Report Name</TableCell>
+              <TableCell>Description</TableCell>
+              <TableCell>Action</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {reportData.buildingBills.map((report) => {
+              const period = formatPeriod(buildingBillPeriod);
+              const key = report.endpoint;
+              return (
+                <TableRow key={key}>
+                  <TableCell>{report.name}</TableCell>
+                  <TableCell>{report.description}</TableCell>
+                  <TableCell>
+                    <Box sx={{ position: 'relative' }}>
+                      <Button
+                        variant="contained"
+                        sx={{ backgroundColor: theme.palette.greenAccent.main }}
+                        onClick={() => handleDownload(key, report.name, period ? { period } : {})}
+                        disabled={downloading[key]}
+                      >
+                        {downloading[key] ? 'Downloading...' : 'Download'}
+                      </Button>
+                      {downloading[key] && (
+                        <LinearProgress
+                          variant="determinate"
+                          value={progress[key] || 0}
+                          sx={{ position: 'absolute', bottom: -4, left: 0, right: 0 }}
+                        />
+                      )}
+                    </Box>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </TableContainer>
+    </Box>
+  );
+
   return (
     <Container sx={{ width: '100%', ml: 20 }}>
       <Box>
@@ -228,7 +310,7 @@ const ReportScreen = () => {
           {activeTab === 2 && renderTabContent(reportData.payments)}
           {activeTab === 3 && renderTabContent(reportData.landlordSummaries)}
           {activeTab === 4 && renderTabContent(reportData.arrears)}
-          {activeTab === 5 && renderTabContent(reportData.buildingBills)}
+          {activeTab === 5 && renderBuildingBillsTab()}
         </Box>
       </Box>
       <Snackbar
