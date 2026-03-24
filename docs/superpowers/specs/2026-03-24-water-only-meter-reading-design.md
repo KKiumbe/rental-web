@@ -25,8 +25,9 @@ Extend `addReadings.jsx` to support water-only customers as a second selection m
 2. Divider: `— or —`
 3. Water-only customer selector (MUI Autocomplete showing `firstName lastName · phoneNumber`)
 
-Selecting a water-only customer clears the building and unit selection.
-Selecting a unit clears the water-only customer selection.
+Selecting a water-only customer: immediately clear `selectedBuildingId`, `selectedUnitId`, `latestReading`, `meterType`, `form`, and `errors`; then set `selectedWaterOnlyCustomerId` and pre-fill `meterType` from the customer record. The auto-fill useEffect then sets `previousReading`.
+
+Selecting a building or unit: clear `selectedWaterOnlyCustomerId` (the existing building/unit useEffects already clear the rest).
 
 **Right panel — shared, unchanged in structure:**
 
@@ -87,7 +88,7 @@ meterType  MeterType  @default(NORMAL)
 
 Run: `npx prisma migrate dev --name add_meter_type_to_water_only_customer`
 
-`GET /water-only-customers` automatically includes `meterType` — the `getAllWaterOnlyCustomers` controller uses no explicit select clause.
+`getAllWaterOnlyCustomers` uses an explicit Prisma `select` clause that does not currently include `meterType`. Add `meterType: true` to the select in `api/API/controller/customers/waterOnlyCustomers/getAllWaterOnlyCustomers.js`.
 
 ---
 
@@ -102,7 +103,10 @@ Run: `npx prisma migrate dev --name add_meter_type_to_water_only_customer`
 - Updates `meterType` on the record
 
 ### Route registration
-Register the new route in the existing water-only customers router.
+Register the new route in `api/API/routes/customer/waterOnlyCustomerRoutes.js`:
+```js
+router.patch('/:id/reading', updateWaterOnlyCustomerReading);
+```
 
 ---
 
@@ -121,18 +125,30 @@ const [selectedWaterOnlyCustomerId, setSelectedWaterOnlyCustomerId] = useState("
 On page load (alongside `fetchBuildings`), call `GET /water-only-customers` and store the result.
 
 ### Mutual exclusivity
-- Selecting a water-only customer: clear `selectedBuildingId`, `selectedUnitId`, `meterType`, `form`, `latestReading`, `errors`; set `selectedWaterOnlyCustomerId`; pre-fill `meterType` and `previousReading` from the customer record
-- Selecting a building/unit: clear `selectedWaterOnlyCustomerId`
+- Selecting a water-only customer: clear `selectedBuildingId`, `selectedUnitId`, `latestReading`, `meterType`, `form`, `errors`; set `selectedWaterOnlyCustomerId`; pre-fill `meterType` from the customer record. The auto-fill useEffect (see below) then sets `previousReading`.
+- Selecting a building or unit: clear `selectedWaterOnlyCustomerId` (the existing building/unit useEffects already clear the rest).
 
 ### Previous reading auto-fill for water-only customers
-When `selectedWaterOnlyCustomerId` changes:
+Add a `useEffect` watching `[selectedWaterOnlyCustomerId, meterType, waterOnlyCustomers]`:
 ```js
-const customer = waterOnlyCustomers.find(c => c.id === selectedWaterOnlyCustomerId);
-if (customer && meterType) {
-  setForm(prev => ({ ...prev, previousReading: String(customer.currentReading * (DIVISORS[meterType] ?? 1)) }));
-}
+useEffect(() => {
+  if (!selectedWaterOnlyCustomerId || !meterType) return;
+  const customer = waterOnlyCustomers.find(c => c.id === selectedWaterOnlyCustomerId);
+  if (customer) {
+    setForm(prev => ({ ...prev, previousReading: String(customer.currentReading * (DIVISORS[meterType] ?? 1)) }));
+  }
+}, [selectedWaterOnlyCustomerId, meterType, waterOnlyCustomers]);
 ```
-This mirrors the existing unit auto-fill logic.
+This mirrors the existing `[latestReading, meterType]` useEffect for units.
+
+### Validation for water-only customers
+The existing `validateForm()` runs regardless of mode. Its rules apply equally to water-only customers:
+- `meterType` must be set
+- `currentReading` must be a non-negative number
+- `currentReading` (raw) must be ≥ `previousReading` (raw) — same raw-to-raw comparison already in place
+- `previousReading`, if provided, must be a non-negative number
+
+No additional validation rules differ for water-only customers.
 
 ### Submit
 Check `selectedWaterOnlyCustomerId` to determine which endpoint to call:
@@ -150,7 +166,11 @@ if (selectedWaterOnlyCustomerId) {
 ### formReady / disabled condition
 Include `selectedWaterOnlyCustomerId` in the OR for unit selection:
 ```js
-const formReady = (selectedBuildingId && selectedUnitId || selectedWaterOnlyCustomerId) && meterType && form.currentReading !== "" && !Object.keys(errors).length;
+const formReady =
+  ((selectedBuildingId && selectedUnitId) || selectedWaterOnlyCustomerId) &&
+  meterType &&
+  form.currentReading !== "" &&
+  !Object.keys(errors).length;
 ```
 
 ---
@@ -168,6 +188,7 @@ const formReady = (selectedBuildingId && selectedUnitId || selectedWaterOnlyCust
 | File | Change |
 |---|---|
 | `api/API/prisma/schema.prisma` | Add `meterType` field to `WaterOnlyCustomer` |
+| `api/API/controller/customers/waterOnlyCustomers/getAllWaterOnlyCustomers.js` | Add `meterType: true` to select clause |
 | `api/API/controller/customers/waterOnlyCustomers/updateWaterOnlyCustomerReading.js` | New controller |
-| `api/API/controller/customers/waterOnlyCustomers/` router file | Register new PATCH route |
+| `api/API/routes/customer/waterOnlyCustomerRoutes.js` | Register new PATCH route |
 | `web/src/pages/meterReadings/addReadings.jsx` | Water-only customer selector, mutual exclusivity, auto-fill, submit routing |
