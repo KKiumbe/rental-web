@@ -88,6 +88,7 @@ const INITIAL_FORM = {
   previousReading: 0,
   currentReading: 0,
   closingBalance: 0,
+  waterRate: 130,
   status: "ACTIVE",
 };
 
@@ -192,6 +193,8 @@ const WaterOnlyCustomers = () => {
     else if (!isNaN(prev) && curr < prev)
       errors.currentReading = "Must be ≥ previous reading";
     if (isNaN(bal)) errors.closingBalance = "Must be a number";
+    const rate = parseFloat(form.waterRate);
+    if (isNaN(rate) || rate < 0) errors.waterRate = "Must be a non-negative number";
 
     return errors;
   };
@@ -216,6 +219,7 @@ const WaterOnlyCustomers = () => {
           previousReading: parseFloat(form.previousReading),
           currentReading: parseFloat(form.currentReading),
           closingBalance: parseFloat(form.closingBalance),
+          waterRate: parseFloat(form.waterRate),
           status: form.status,
         },
         { withCredentials: true }
@@ -322,6 +326,13 @@ const WaterOnlyCustomers = () => {
           </Typography>
         );
       },
+    },
+    {
+      field: "waterRate",
+      headerName: "Water Rate",
+      flex: 1,
+      minWidth: 120,
+      renderCell: ({ value }) => value != null ? `KSH ${value}/m³` : '—',
     },
     {
       field: "status",
@@ -506,6 +517,18 @@ const WaterOnlyCustomers = () => {
                 error={!!fieldErrors.closingBalance}
                 helperText={fieldErrors.closingBalance ?? "Negative = credit"}
                 inputProps={{ step: "any" }}
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                label="Water Rate (KSH/m³)"
+                type="number"
+                fullWidth
+                value={form.waterRate}
+                onChange={(e) => handleFormChange("waterRate", e.target.value)}
+                error={!!fieldErrors.waterRate}
+                helperText={fieldErrors.waterRate ?? "Default: 130"}
+                inputProps={{ min: 0, step: "any" }}
               />
             </Grid>
           </Grid>
