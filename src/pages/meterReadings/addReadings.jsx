@@ -17,6 +17,8 @@ import {
   Tooltip,
   InputAdornment,
 } from "@mui/material";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import { useAuthStore } from "../../store/authStore";
@@ -28,6 +30,8 @@ import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
 import SpeedIcon from "@mui/icons-material/Speed";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+
+const DIVISORS = { NORMAL: 1, DIVIDE_1000: 1000, DIVIDE_10000: 10000 };
 
 export default function CreateWaterReading() {
   const [form, setForm] = useState({ previousReading: "", currentReading: "" });
@@ -44,6 +48,7 @@ export default function CreateWaterReading() {
   const [snackbarSeverity, setSnackbarSeverity] = useState("success");
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
+  const [meterType, setMeterType] = useState(null); // null = not yet set for this unit
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -109,7 +114,7 @@ export default function CreateWaterReading() {
         params: { unitId },
         withCredentials: true,
       });
-      const data = res.data?.data || res.data || null;
+      const data = res.data?.latestReading || null;
       setLatestReading(data);
       if (data?.reading != null) {
         setForm((prev) => ({ ...prev, previousReading: String(data.reading) }));
@@ -142,12 +147,14 @@ export default function CreateWaterReading() {
 
   const validateForm = () => {
     const errs = {};
+    if (!meterType) errs.meterType = "Please select a meter type";
     if (!selectedUnitId) errs.unit = "Please select a unit";
     const prev = form.previousReading !== "" ? parseFloat(form.previousReading) : null;
     const curr = parseFloat(form.currentReading);
+    const currM3 = isNaN(curr) ? NaN : curr / divisor;
     if (form.currentReading === "" || isNaN(curr) || curr < 0) {
       errs.currentReading = "Current reading must be a non-negative number";
-    } else if (prev !== null && !isNaN(prev) && curr < prev) {
+    } else if (prev !== null && !isNaN(prev) && currM3 < prev) {
       errs.currentReading = "Current reading cannot be less than the previous reading";
     }
     if (form.previousReading !== "" && (isNaN(parseFloat(form.previousReading)) || parseFloat(form.previousReading) < 0)) {
@@ -164,8 +171,11 @@ export default function CreateWaterReading() {
     try {
       const payload = {
         unitId: selectedUnitId,
-        reading: parseFloat(form.currentReading),
-        ...(form.previousReading !== "" && { previousReading: parseFloat(form.previousReading) }),
+        reading: parseFloat(form.currentReading) / divisor,   // converted to m³
+        meterType,
+        ...(form.previousReading !== "" && {
+          previousReading: parseFloat(form.previousReading),  // already in m³, no division
+        }),
       };
       const res = await axios.post(`${BASEURL}/water-reading`, payload, { withCredentials: true });
       showSnackbar(res.data?.message || "Reading created successfully", "success");
@@ -182,15 +192,27 @@ export default function CreateWaterReading() {
     setSelectedBuildingId("");
     setSelectedUnitId("");
     setLatestReading(null);
+    setMeterType(null);
     setErrors({});
     setSubmitted(false);
   };
 
   // ── Derived ───────────────────────────────────────────────────────
+  const divisor = meterType ? (DIVISORS[meterType] ?? 1) : 1;
+
+  const currentM3 =
+    form.currentReading !== "" && !isNaN(form.currentReading) && meterType
+      ? parseFloat(form.currentReading) / divisor
+      : null;
+
+  const previousM3 =
+    form.previousReading !== "" && !isNaN(form.previousReading)
+      ? parseFloat(form.previousReading)   // always in m³ (auto-filled from API or manually entered)
+      : null;
+
   const consumption =
-    form.previousReading !== "" && form.currentReading !== "" &&
-    !isNaN(form.previousReading) && !isNaN(form.currentReading)
-      ? (parseFloat(form.currentReading) - parseFloat(form.previousReading)).toFixed(2)
+    currentM3 !== null && previousM3 !== null
+      ? (currentM3 - previousM3).toFixed(2)
       : null;
 
   const selectedUnit = units.find((u) => u.id === selectedUnitId) || null;
@@ -201,7 +223,7 @@ export default function CreateWaterReading() {
     null;
 
   const formReady =
-    selectedBuildingId && selectedUnitId && form.currentReading !== "" && !Object.keys(errors).length;
+    selectedBuildingId && selectedUnitId && meterType && form.currentReading !== "" && !Object.keys(errors).length;
 
   // ── Effects ───────────────────────────────────────────────────────
   useEffect(() => {
@@ -217,6 +239,7 @@ export default function CreateWaterReading() {
       setUnits([]);
     }
     setSelectedUnitId("");
+    setMeterType(null);
     setForm({ previousReading: "", currentReading: "" });
     setLatestReading(null);
     setErrors({});
@@ -227,11 +250,15 @@ export default function CreateWaterReading() {
       setForm({ previousReading: "", currentReading: "" });
       setErrors({});
       fetchLatestReading(selectedUnitId);
+      // Pre-fill meterType from unit data
+      const unit = units.find((u) => u.id === selectedUnitId);
+      setMeterType(unit?.meterType || null);
     } else {
       setForm({ previousReading: "", currentReading: "" });
       setLatestReading(null);
+      setMeterType(null);
     }
-  }, [selectedUnitId, fetchLatestReading]);
+  }, [selectedUnitId, fetchLatestReading, units]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -436,6 +463,51 @@ export default function CreateWaterReading() {
             onSubmit={handleSubmit}
             sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}
           >
+            {/* Meter Type Selector */}
+            <Box>
+              <Typography variant="caption" sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em", display: "block", mb: 0.75 }}>
+                Meter Type *
+              </Typography>
+              <ToggleButtonGroup
+                value={meterType}
+                exclusive
+                onChange={(_, val) => { if (val) { setMeterType(val); setErrors((p) => ({ ...p, meterType: "" })); } }}
+                size="small"
+                fullWidth
+                sx={{
+                  "& .MuiToggleButton-root": {
+                    borderColor,
+                    color: textSecondary,
+                    textTransform: "none",
+                    fontSize: "0.8rem",
+                    fontWeight: 500,
+                    flex: 1,
+                    "&.Mui-selected": {
+                      bgcolor: alpha(accentGreen, 0.12),
+                      color: accentGreen,
+                      borderColor: accentGreen,
+                      fontWeight: 700,
+                    },
+                    "&:hover": { bgcolor: alpha(accentGreen, 0.06) },
+                  },
+                }}
+              >
+                <ToggleButton value="NORMAL">Normal</ToggleButton>
+                <ToggleButton value="DIVIDE_1000">÷ 1,000</ToggleButton>
+                <ToggleButton value="DIVIDE_10000">÷ 10,000</ToggleButton>
+              </ToggleButtonGroup>
+              {errors.meterType && (
+                <Typography variant="caption" sx={{ color: "#f44336", mt: 0.5, display: "block" }}>
+                  {errors.meterType}
+                </Typography>
+              )}
+              {!meterType && (
+                <Typography variant="caption" sx={{ color: "#ff9800", mt: 0.5, display: "block" }}>
+                  Select meter type to continue
+                </Typography>
+              )}
+            </Box>
+
             {/* Previous reading info */}
             {latestReadingLoading ? (
               <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, py: 1 }}>
@@ -511,7 +583,7 @@ export default function CreateWaterReading() {
             {/* Current reading field */}
             <TextField
               fullWidth
-              label="Current Reading (m\u00b3) *"
+              label={meterType && meterType !== "NORMAL" ? "Current Reading (raw meter value) *" : "Current Reading (m³) *"}
               name="currentReading"
               type="number"
               value={form.currentReading}
@@ -554,10 +626,12 @@ export default function CreateWaterReading() {
                     Consumption Summary
                   </Typography>
                   <Typography variant="h6" sx={{ fontWeight: 700, color: accentGreen, lineHeight: 1.2, mt: 0.25 }}>
-                    {consumption} m\u00b3
+                    {consumption} m³
                   </Typography>
                   <Typography variant="caption" sx={{ color: textSecondary }}>
-                    {form.previousReading} \u2192 {form.currentReading} m\u00b3
+                    {divisor > 1
+                      ? `${form.currentReading} ÷ ${divisor.toLocaleString()} = ${currentM3?.toFixed(3)} m³ − ${previousM3?.toFixed(3)} m³`
+                      : `${previousM3?.toFixed(3)} → ${currentM3?.toFixed(3)} m³`}
                   </Typography>
                 </Box>
                 <WaterDropIcon sx={{ color: alpha(accentGreen, 0.35), fontSize: 36 }} />
@@ -611,7 +685,7 @@ export default function CreateWaterReading() {
                 <Button
                   type="submit"
                   variant="contained"
-                  disabled={formLoading || !selectedUnitId}
+                  disabled={formLoading || !selectedUnitId || !meterType}
                   fullWidth
                   sx={{
                     bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
