@@ -79,6 +79,23 @@ const reportData = {
       endpoint: `${BASEURL}/reports/arrears-per-building`,
     },
   ],
+  buildingBills: [
+    {
+      name: 'Full Bill Report (Rent + Water)',
+      description: 'Per-building breakdown: tenant name, unit, rent bill, water bill, balance, and total for the current month',
+      endpoint: `${BASEURL}/reports/building-bill`,
+    },
+    {
+      name: 'Rent Bill Report',
+      description: 'Per-building list of rent invoices only — tenant name, unit, rent amount, balance, and building totals',
+      endpoint: `${BASEURL}/reports/building-rent`,
+    },
+    {
+      name: 'Water Bill Report',
+      description: 'Per-building list of water invoices only — tenant name, unit, water amount, balance, and building totals',
+      endpoint: `${BASEURL}/reports/building-water`,
+    },
+  ],
 };
 
 const ReportScreen = () => {
@@ -202,6 +219,7 @@ const ReportScreen = () => {
   <Tab label="Payments" />
   <Tab label="Landlord Summaries" />
   <Tab label="Arrears" />
+  <Tab label="Building Bills" />
 </Tabs>
 
         <Box sx={{ mt: 2 }}>
@@ -210,6 +228,7 @@ const ReportScreen = () => {
           {activeTab === 2 && renderTabContent(reportData.payments)}
           {activeTab === 3 && renderTabContent(reportData.landlordSummaries)}
           {activeTab === 4 && renderTabContent(reportData.arrears)}
+          {activeTab === 5 && renderTabContent(reportData.buildingBills)}
         </Box>
       </Box>
       <Snackbar

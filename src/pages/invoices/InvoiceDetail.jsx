@@ -232,10 +232,10 @@ const InvoiceDetails = () => {
             {invoice. InvoiceItem.map((item) => (
               <TableRow key={item.id}>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>{item.description}</TableCell>
-                <TableCell sx={{ color: theme.palette.grey[100] }}>KES {item.amount.toFixed(2)}</TableCell>
+                <TableCell sx={{ color: theme.palette.grey[100] }}>KES {Math.round(item.amount)}</TableCell>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>{item.quantity}</TableCell>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>
-                  KES {(item.amount * item.quantity).toFixed(2)}
+                  KES {Math.round(item.amount * item.quantity)}
                 </TableCell>
               </TableRow>
             ))}
@@ -264,7 +264,7 @@ const InvoiceDetails = () => {
             {invoice.payments.map((payment) => (
               <TableRow key={payment.id}>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>
-                  KES {payment.amount.toFixed(2)}
+                  KES {Math.round(payment.amount)}
                 </TableCell>
                 <TableCell sx={{ color: theme.palette.grey[100] }}>
                   {new Date(payment.paymentDate).toLocaleString(undefined, {
@@ -380,13 +380,13 @@ const InvoiceDetails = () => {
             })}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.palette.grey[100] }}>
-            <strong>Closing Balance:</strong> KES {invoice.closingBalance.toFixed(2)}
+            <strong>Closing Balance:</strong> KES {Math.round(invoice.closingBalance)}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.palette.grey[100] }}>
-            <strong>Amount Paid:</strong> KES {invoice.amountPaid.toFixed(2)}
+            <strong>Amount Paid:</strong> KES {Math.round(invoice.amountPaid)}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.palette.grey[100] }}>
-            <strong>Outstanding Balance:</strong> KES {invoice.outstandingBalance.toFixed(2)}
+            <strong>Outstanding Balance:</strong> KES {Math.round(invoice.outstandingBalance)}
           </Typography>
           <Typography variant="body2" sx={{ color: theme.palette.grey[100] }}>
             <strong>Total Items:</strong> {invoice.totalItems}
@@ -400,7 +400,7 @@ const InvoiceDetails = () => {
           {renderInvoiceItems()}
 
           <Typography variant="h6" sx={{ mt: 2, color: theme.palette.grey[100] }}>
-            Total: KES {invoice.invoiceAmount.toFixed(2)}
+            Total: KES {Math.round(invoice.invoiceAmount)}
           </Typography>
 
           <Divider sx={{ my: 2, borderColor: theme.palette.grey[300] }} />

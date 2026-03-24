@@ -40,6 +40,7 @@ function SendBillsScreen() {
   const [snackbarMessage, setSnackbarMessage] = useState('');
   // State for period in Send Bills to All
   const [selectedPeriod, setSelectedPeriod] = useState(null);
+  const [selectedBuildingForAll, setSelectedBuildingForAll] = useState(null);
   // States for send bills per landlord or building
   const [landlords, setLandlords] = useState([]);
   const [buildings, setBuildings] = useState([]);
@@ -102,6 +103,7 @@ function SendBillsScreen() {
     setIsPhoneSearch(false);
     setSelectedLandlord(null);
     setSelectedBuilding(null);
+    setSelectedBuildingForAll(null);
     setSelectedPeriod(null);
     setGroupPeriod(null);
   };
@@ -124,13 +126,16 @@ function SendBillsScreen() {
 
     const period = formatPeriod(selectedPeriod);
     try {
+      const payload = { period };
+      if (selectedBuildingForAll) payload.buildingID = selectedBuildingForAll.id;
       const response = await axios.post(
         `${BASEURL}/send-bills`,
-        { period },
+        payload,
         { withCredentials: true }
       );
       setMessage(response.data.message);
       setSelectedPeriod(null);
+      setSelectedBuildingForAll(null);
     } catch (error) {
       setMessage(error.response?.data?.error || 'Error sending bills');
     }
@@ -322,13 +327,37 @@ function SendBillsScreen() {
                   maxDate={new Date()}
                 />
               </LocalizationProvider>
+              <Autocomplete
+                options={buildings}
+                getOptionLabel={(option) => option.name || `Building ${option.id}`}
+                value={selectedBuildingForAll}
+                onChange={(_, newValue) => setSelectedBuildingForAll(newValue)}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    label="Filter by Building (optional — leave blank for all)"
+                    variant="outlined"
+                    fullWidth
+                    margin="normal"
+                    InputProps={{
+                      ...params.InputProps,
+                      endAdornment: (
+                        <>
+                          {buildingsLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                          {params.InputProps.endAdornment}
+                        </>
+                      ),
+                    }}
+                  />
+                )}
+              />
               <Button
                 variant="contained"
                 color="primary"
                 onClick={handleSendBillsToAll}
                 sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
               >
-                Send Now
+                {selectedBuildingForAll ? `Send to ${selectedBuildingForAll.name}` : 'Send to All Buildings'}
               </Button>
             </>
           )}

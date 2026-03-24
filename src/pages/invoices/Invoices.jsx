@@ -284,7 +284,7 @@ export default function InvoiceList() {
       width: 140,
       renderCell: (params) => (
         <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {Number(params.value || 0).toLocaleString()}
+          {Math.round(Number(params.value || 0)).toLocaleString()}
         </Typography>
       ),
     },
@@ -294,7 +294,7 @@ export default function InvoiceList() {
       width: 130,
       renderCell: (params) => (
         <Typography variant="body2" sx={{ color: "#4caf50", fontWeight: 600 }}>
-          {Number(params.value || 0).toLocaleString()}
+          {Math.round(Number(params.value || 0)).toLocaleString()}
         </Typography>
       ),
     },
@@ -303,7 +303,7 @@ export default function InvoiceList() {
       headerName: "Balance",
       width: 130,
       renderCell: (params) => {
-        const bal = Number(params.value || 0);
+        const bal = Math.round(Number(params.value || 0));
         return (
           <Typography variant="body2" sx={{ color: bal > 0 ? "#f44336" : "#4caf50", fontWeight: 600 }}>
             {bal.toLocaleString()}
