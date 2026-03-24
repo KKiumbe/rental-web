@@ -11,12 +11,14 @@ import {
   CircularProgress,
   Snackbar,
   Alert,
+  Divider,
 } from '@mui/material';
 import { getTheme } from '../../store/theme';
 import TitleComponent from '../../components/title';
 import { LocalizationProvider } from "@mui/x-date-pickers";
 import { AdapterDateFns } from "@mui/x-date-pickers/AdapterDateFns";
 import { DatePicker } from "@mui/x-date-pickers/DatePicker";
+import { addMonths } from 'date-fns';
 
 const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
 
@@ -29,7 +31,18 @@ function SendBillsScreen() {
   const [buildingsLoading, setBuildingsLoading]     = useState(false);
   const [snackbarOpen, setSnackbarOpen]             = useState(false);
   const [snackbarMessage, setSnackbarMessage]       = useState('');
+
+  // Single-customer state
+  const [customers, setCustomers]                   = useState([]);
+  const [customersLoading, setCustomersLoading]     = useState(false);
+  const [selectedCustomer, setSelectedCustomer]     = useState(null);
+  const [sendingOne, setSendingOne]                 = useState(false);
+  const [oneMessage, setOneMessage]                 = useState('');
+
   const theme = getTheme();
+
+  // Allow up to next month (bills are generated early)
+  const maxDate = addMonths(new Date(), 1);
 
   const fetchBuildings = useCallback(async () => {
     try {
@@ -44,7 +57,23 @@ function SendBillsScreen() {
     }
   }, []);
 
-  useEffect(() => { fetchBuildings(); }, [fetchBuildings]);
+  const fetchCustomers = useCallback(async () => {
+    try {
+      setCustomersLoading(true);
+      const res = await axios.get(`${BASEURL}/customers`, { withCredentials: true });
+      setCustomers(res.data.customers || []);
+    } catch {
+      setSnackbarMessage('Failed to load customers');
+      setSnackbarOpen(true);
+    } finally {
+      setCustomersLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchBuildings();
+    fetchCustomers();
+  }, [fetchBuildings, fetchCustomers]);
 
   const formatPeriod = (date) => {
     if (!date) return '';
@@ -75,29 +104,48 @@ function SendBillsScreen() {
     }
   };
 
+  const handleSendOneBill = async () => {
+    if (!selectedCustomer) {
+      setSnackbarMessage('Please select a customer');
+      setSnackbarOpen(true);
+      return;
+    }
+    setSendingOne(true);
+    setOneMessage('');
+    try {
+      const res = await axios.post(`${BASEURL}/send-bill`, { customerId: selectedCustomer.id }, { withCredentials: true });
+      setOneMessage(res.data.message || 'Bill sent successfully');
+      setSelectedCustomer(null);
+    } catch (err) {
+      setOneMessage(err.response?.data?.error || err.response?.data?.message || 'Error sending bill');
+    } finally {
+      setSendingOne(false);
+    }
+  };
+
   return (
     <Container maxWidth="sm" sx={{ pt: 3, ml: 20 }}>
       <TitleComponent title="Bills Center" />
+
+      {/* ── Send to All / Building ── */}
       <Paper elevation={3} sx={{ p: 3, mt: 2 }}>
         <Typography variant="h6" gutterBottom>
           Send Bills
         </Typography>
 
-        {/* Period picker — restricted to current month and earlier */}
         <LocalizationProvider dateAdapter={AdapterDateFns}>
           <DatePicker
             views={["year", "month"]}
             label="Billing Period"
             value={selectedPeriod}
             onChange={setSelectedPeriod}
-            maxDate={new Date()}
+            maxDate={maxDate}
             renderInput={(params) => (
-              <TextField {...params} fullWidth margin="normal" helperText="Current month or earlier" />
+              <TextField {...params} fullWidth margin="normal" helperText="Select billing month (next month allowed)" />
             )}
           />
         </LocalizationProvider>
 
-        {/* Optional building filter */}
         <Autocomplete
           options={buildings}
           getOptionLabel={(o) => o.name || `Building ${o.id}`}
@@ -137,6 +185,59 @@ function SendBillsScreen() {
           <Box sx={{ mt: 2 }}>
             <Typography color={message.toLowerCase().includes('error') ? 'error' : 'success.main'}>
               {message}
+            </Typography>
+          </Box>
+        )}
+      </Paper>
+
+      {/* ── Send to Specific Tenant ── */}
+      <Paper elevation={3} sx={{ p: 3, mt: 3 }}>
+        <Typography variant="h6" gutterBottom>
+          Send Bill to Specific Tenant
+        </Typography>
+        <Typography variant="caption" color="text.secondary" sx={{ mb: 1, display: 'block' }}>
+          Sends the latest available bill (next month if ready, otherwise current month)
+        </Typography>
+
+        <Autocomplete
+          options={customers}
+          getOptionLabel={(o) => `${o.firstName} ${o.lastName || ''}`.trim() || o.phoneNumber || `Customer ${o.id}`}
+          value={selectedCustomer}
+          onChange={(_, v) => setSelectedCustomer(v)}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Search Tenant"
+              variant="outlined"
+              fullWidth
+              margin="normal"
+              InputProps={{
+                ...params.InputProps,
+                endAdornment: (
+                  <>
+                    {customersLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {params.InputProps.endAdornment}
+                  </>
+                ),
+              }}
+            />
+          )}
+        />
+
+        <Button
+          variant="contained"
+          onClick={handleSendOneBill}
+          disabled={sendingOne || !selectedCustomer}
+          sx={{ mt: 2, bgcolor: theme.palette.greenAccent.main }}
+          startIcon={sendingOne ? <CircularProgress size={16} color="inherit" /> : null}
+        >
+          {sendingOne ? 'Sending…' : selectedCustomer ? `Send Bill to ${selectedCustomer.firstName}` : 'Send Bill'}
+        </Button>
+
+        {oneMessage && (
+          <Box sx={{ mt: 2 }}>
+            <Typography color={oneMessage.toLowerCase().includes('error') ? 'error' : 'success.main'}>
+              {oneMessage}
             </Typography>
           </Box>
         )}
