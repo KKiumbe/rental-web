@@ -103,10 +103,21 @@ Run: `npx prisma migrate dev --name add_meter_type_to_water_only_customer`
 - Updates `meterType` on the record
 
 ### Route registration
-Register the new route in `api/API/routes/customer/waterOnlyCustomerRoutes.js`:
+Register the new route in `api/API/routes/customer/waterOnlyCustomerRoutes.js` with the same auth middleware used by the existing routes in that file:
 ```js
-router.patch('/:id/reading', updateWaterOnlyCustomerReading);
+router.patch('/:id/reading', verifyToken, updateWaterOnlyCustomerReading);
 ```
+
+### PATCH response
+Return the updated customer record and a success message:
+```js
+res.status(200).json({
+  success: true,
+  message: 'Reading updated successfully',
+  data: updatedCustomer,
+});
+```
+The frontend uses `res.data?.message` for the snackbar (same as the unit reading flow).
 
 ---
 
@@ -142,13 +153,21 @@ useEffect(() => {
 This mirrors the existing `[latestReading, meterType]` useEffect for units.
 
 ### Validation for water-only customers
-The existing `validateForm()` runs regardless of mode. Its rules apply equally to water-only customers:
+The existing `validateForm()` has a unit-only check `if (!selectedUnitId) errs.unit = "..."`. This must be made mode-aware:
+```js
+if (!selectedUnitId && !selectedWaterOnlyCustomerId) errs.unit = "Please select a unit";
+```
+
+All other rules apply unchanged to water-only customers:
 - `meterType` must be set
 - `currentReading` must be a non-negative number
-- `currentReading` (raw) must be ≥ `previousReading` (raw) — same raw-to-raw comparison already in place
+- `currentReading` (raw) must be ≥ `previousReading` (raw) — same raw-to-raw comparison
 - `previousReading`, if provided, must be a non-negative number
 
-No additional validation rules differ for water-only customers.
+### meterType pre-fill and null handling
+When selecting a water-only customer, call `setMeterType(customer.meterType || null)` in the onChange handler (synchronously). If the customer's `meterType` is null (e.g., old records created before this migration), `meterType` stays null and the user must select one — identical behavior to a unit with no meter type set.
+
+The existing `[latestReading, meterType]` auto-fill useEffect for units is already safe in water-only mode: it checks `latestReading?.reading != null` which is always false (latestReading is cleared to null on customer selection), so it won't interfere.
 
 ### Submit
 Check `selectedWaterOnlyCustomerId` to determine which endpoint to call:
