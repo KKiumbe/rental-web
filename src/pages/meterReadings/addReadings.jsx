@@ -599,7 +599,7 @@ export default function CreateWaterReading() {
               size="small"
               inputProps={{ step: "0.01", min: 0 }}
               InputProps={{
-                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>m\u00b3</Typography></InputAdornment>,
+                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>{meterType && meterType !== "NORMAL" ? "raw" : "m\u00b3"}</Typography></InputAdornment>,
               }}
               sx={{
                 ...fieldSx,
