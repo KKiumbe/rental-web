@@ -166,7 +166,6 @@ export default function CreateWaterReading() {
     if (!selectedUnitId && !selectedWaterOnlyCustomerId) errs.unit = "Please select a unit or water-only customer";
     const prev = form.previousReading !== "" ? parseFloat(form.previousReading) : null;
     const curr = parseFloat(form.currentReading);
-    const currM3 = isNaN(curr) ? NaN : curr / divisor;
     if (form.currentReading === "" || isNaN(curr) || curr < 0) {
       errs.currentReading = "Current reading must be a non-negative number";
     } else if (prev !== null && !isNaN(prev) && curr < prev) {
@@ -194,6 +193,7 @@ export default function CreateWaterReading() {
           },
           { withCredentials: true }
         );
+        await fetchWaterOnlyCustomers(); // refresh so next reading auto-fill uses updated currentReading
       } else {
         const payload = {
           unitId: selectedUnitId,
@@ -335,7 +335,7 @@ export default function CreateWaterReading() {
               Create Water Reading
             </Typography>
             <Typography variant="caption" sx={{ color: textSecondary }}>
-              Record a new meter reading for a unit
+              Record a new meter reading for a unit or water-only customer
             </Typography>
           </Box>
         </Box>
@@ -805,7 +805,7 @@ export default function CreateWaterReading() {
                 <Button
                   type="submit"
                   variant="contained"
-                  disabled={formLoading || !selectedUnitId || !meterType}
+                  disabled={formLoading || (!selectedUnitId && !selectedWaterOnlyCustomerId) || !meterType}
                   fullWidth
                   sx={{
                     bgcolor: accentGreen, color: "#fff", textTransform: "none", fontWeight: 600,
