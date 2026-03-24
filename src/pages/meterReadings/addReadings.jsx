@@ -116,9 +116,6 @@ export default function CreateWaterReading() {
       });
       const data = res.data?.latestReading || null;
       setLatestReading(data);
-      if (data?.reading != null) {
-        setForm((prev) => ({ ...prev, previousReading: String(data.reading) }));
-      }
     } catch (err) {
       if (err.response?.status === 404) {
         setLatestReading(null);
@@ -154,7 +151,7 @@ export default function CreateWaterReading() {
     const currM3 = isNaN(curr) ? NaN : curr / divisor;
     if (form.currentReading === "" || isNaN(curr) || curr < 0) {
       errs.currentReading = "Current reading must be a non-negative number";
-    } else if (prev !== null && !isNaN(prev) && currM3 < prev) {
+    } else if (prev !== null && !isNaN(prev) && curr < prev) {
       errs.currentReading = "Current reading cannot be less than the previous reading";
     }
     if (form.previousReading !== "" && (isNaN(parseFloat(form.previousReading)) || parseFloat(form.previousReading) < 0)) {
@@ -174,7 +171,7 @@ export default function CreateWaterReading() {
         reading: parseFloat(form.currentReading) / divisor,   // converted to m³
         meterType,
         ...(form.previousReading !== "" && {
-          previousReading: parseFloat(form.previousReading),  // already in m³, no division
+          previousReading: parseFloat(form.previousReading) / divisor,  // raw → m³
         }),
       };
       const res = await axios.post(`${BASEURL}/water-reading`, payload, { withCredentials: true });
@@ -207,7 +204,7 @@ export default function CreateWaterReading() {
 
   const previousM3 =
     form.previousReading !== "" && !isNaN(form.previousReading)
-      ? parseFloat(form.previousReading)   // always in m³ (auto-filled from API or manually entered)
+      ? parseFloat(form.previousReading) / divisor   // raw → m³
       : null;
 
   const consumption =
@@ -259,6 +256,14 @@ export default function CreateWaterReading() {
       setMeterType(null);
     }
   }, [selectedUnitId, fetchLatestReading, units]);
+
+  // Auto-fill previousReading as raw units whenever latestReading or meterType changes
+  useEffect(() => {
+    if (latestReading?.reading != null && meterType) {
+      const rawValue = latestReading.reading * (DIVISORS[meterType] ?? 1);
+      setForm((prev) => ({ ...prev, previousReading: String(rawValue) }));
+    }
+  }, [latestReading, meterType]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -534,7 +539,11 @@ export default function CreateWaterReading() {
                       <Box sx={{ display: "flex", gap: 2, flexWrap: "wrap" }}>
                         <Box>
                           <Typography variant="caption" sx={{ color: textSecondary }}>Reading</Typography>
-                          <Typography variant="body2" sx={{ fontWeight: 700, color: accentBlue }}>{latestReading.reading} m\u00b3</Typography>
+                          <Typography variant="body2" sx={{ fontWeight: 700, color: accentBlue }}>
+                            {meterType && meterType !== "NORMAL"
+                              ? `${(latestReading.reading * (DIVISORS[meterType] ?? 1)).toLocaleString()} raw`
+                              : `${latestReading.reading} m³`}
+                          </Typography>
                         </Box>
                         {latestReading.consumption != null && (
                           <Box>
@@ -564,7 +573,7 @@ export default function CreateWaterReading() {
             {/* Previous reading field */}
             <TextField
               fullWidth
-              label="Previous Reading (m\u00b3) \u2014 optional"
+              label={meterType && meterType !== "NORMAL" ? "Previous Reading (raw meter value) \u2014 optional" : "Previous Reading (m\u00b3) \u2014 optional"}
               name="previousReading"
               type="number"
               value={form.previousReading}
@@ -575,7 +584,7 @@ export default function CreateWaterReading() {
               size="small"
               inputProps={{ step: "0.01", min: 0 }}
               InputProps={{
-                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>m\u00b3</Typography></InputAdornment>,
+                endAdornment: <InputAdornment position="end"><Typography variant="caption" sx={{ color: textSecondary }}>{meterType && meterType !== "NORMAL" ? "raw" : "m\u00b3"}</Typography></InputAdornment>,
               }}
               sx={fieldSx}
             />
@@ -630,8 +639,8 @@ export default function CreateWaterReading() {
                   </Typography>
                   <Typography variant="caption" sx={{ color: textSecondary }}>
                     {divisor > 1
-                      ? `${form.currentReading} ÷ ${divisor.toLocaleString()} = ${currentM3?.toFixed(3)} m³ − ${previousM3?.toFixed(3)} m³`
-                      : `${previousM3?.toFixed(3)} → ${currentM3?.toFixed(3)} m³`}
+                      ? `(${parseFloat(form.currentReading).toLocaleString()} − ${parseFloat(form.previousReading).toLocaleString()}) ÷ ${divisor.toLocaleString()} = ${consumption} m³`
+                      : `${form.previousReading} → ${form.currentReading} m³`}
                   </Typography>
                 </Box>
                 <WaterDropIcon sx={{ color: alpha(accentGreen, 0.35), fontSize: 36 }} />
