@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from "react";
 import {
+  Autocomplete,
   Box,
   Button,
   Typography,
@@ -30,6 +31,7 @@ import MeetingRoomIcon from "@mui/icons-material/MeetingRoom";
 import SpeedIcon from "@mui/icons-material/Speed";
 import CheckCircleIcon from "@mui/icons-material/CheckCircle";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import PersonIcon from "@mui/icons-material/Person";
 
 const DIVISORS = { NORMAL: 1, DIVIDE_1000: 1000, DIVIDE_10000: 10000 };
 
@@ -49,6 +51,9 @@ export default function CreateWaterReading() {
   const [errors, setErrors] = useState({});
   const [submitted, setSubmitted] = useState(false);
   const [meterType, setMeterType] = useState(null); // null = not yet set for this unit
+  const [waterOnlyCustomers, setWaterOnlyCustomers] = useState([]);
+  const [waterOnlyCustomersLoading, setWaterOnlyCustomersLoading] = useState(false);
+  const [selectedWaterOnlyCustomerId, setSelectedWaterOnlyCustomerId] = useState("");
 
   const currentUser = useAuthStore((state) => state.currentUser);
   const navigate = useNavigate();
@@ -129,6 +134,19 @@ export default function CreateWaterReading() {
     }
   }, [navigate, BASEURL]);
 
+  const fetchWaterOnlyCustomers = useCallback(async () => {
+    try {
+      setWaterOnlyCustomersLoading(true);
+      const res = await axios.get(`${BASEURL}/water-only-customers`, { withCredentials: true });
+      setWaterOnlyCustomers(res.data?.data || []);
+    } catch (err) {
+      if (err.response?.status === 401) { navigate("/login"); return; }
+      showSnackbar("Failed to fetch water-only customers", "error");
+    } finally {
+      setWaterOnlyCustomersLoading(false);
+    }
+  }, [navigate, BASEURL]);
+
   // ── Helpers ───────────────────────────────────────────────────────
   const showSnackbar = (msg, severity = "success") => {
     setSnackbarMessage(msg);
@@ -145,7 +163,7 @@ export default function CreateWaterReading() {
   const validateForm = () => {
     const errs = {};
     if (!meterType) errs.meterType = "Please select a meter type";
-    if (!selectedUnitId) errs.unit = "Please select a unit";
+    if (!selectedUnitId && !selectedWaterOnlyCustomerId) errs.unit = "Please select a unit or water-only customer";
     const prev = form.previousReading !== "" ? parseFloat(form.previousReading) : null;
     const curr = parseFloat(form.currentReading);
     const currM3 = isNaN(curr) ? NaN : curr / divisor;
@@ -166,15 +184,27 @@ export default function CreateWaterReading() {
     if (Object.keys(validationErrors).length > 0) { setErrors(validationErrors); return; }
     setFormLoading(true);
     try {
-      const payload = {
-        unitId: selectedUnitId,
-        reading: parseFloat(form.currentReading) / divisor,   // converted to m³
-        meterType,
-        ...(form.previousReading !== "" && {
-          previousReading: parseFloat(form.previousReading) / divisor,  // raw → m³
-        }),
-      };
-      const res = await axios.post(`${BASEURL}/water-reading`, payload, { withCredentials: true });
+      let res;
+      if (selectedWaterOnlyCustomerId) {
+        res = await axios.patch(
+          `${BASEURL}/water-only-customers/${selectedWaterOnlyCustomerId}/reading`,
+          {
+            reading: parseFloat(form.currentReading) / divisor,
+            meterType,
+          },
+          { withCredentials: true }
+        );
+      } else {
+        const payload = {
+          unitId: selectedUnitId,
+          reading: parseFloat(form.currentReading) / divisor,
+          meterType,
+          ...(form.previousReading !== "" && {
+            previousReading: parseFloat(form.previousReading) / divisor,
+          }),
+        };
+        res = await axios.post(`${BASEURL}/water-reading`, payload, { withCredentials: true });
+      }
       showSnackbar(res.data?.message || "Reading created successfully", "success");
       setSubmitted(true);
     } catch (err) {
@@ -190,6 +220,7 @@ export default function CreateWaterReading() {
     setSelectedUnitId("");
     setLatestReading(null);
     setMeterType(null);
+    setSelectedWaterOnlyCustomerId("");
     setErrors({});
     setSubmitted(false);
   };
@@ -220,13 +251,17 @@ export default function CreateWaterReading() {
     null;
 
   const formReady =
-    selectedBuildingId && selectedUnitId && meterType && form.currentReading !== "" && !Object.keys(errors).length;
+    ((selectedBuildingId && selectedUnitId) || selectedWaterOnlyCustomerId) &&
+    meterType &&
+    form.currentReading !== "" &&
+    !Object.keys(errors).length;
 
   // ── Effects ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!currentUser) { navigate("/login"); return; }
     fetchBuildings();
-  }, [currentUser, navigate, fetchBuildings]);
+    fetchWaterOnlyCustomers();
+  }, [currentUser, navigate, fetchBuildings, fetchWaterOnlyCustomers]);
 
   useEffect(() => {
     if (selectedBuildingId) {
@@ -236,6 +271,7 @@ export default function CreateWaterReading() {
       setUnits([]);
     }
     setSelectedUnitId("");
+    setSelectedWaterOnlyCustomerId("");
     setMeterType(null);
     setForm({ previousReading: "", currentReading: "" });
     setLatestReading(null);
@@ -264,6 +300,18 @@ export default function CreateWaterReading() {
       setForm((prev) => ({ ...prev, previousReading: String(rawValue) }));
     }
   }, [latestReading, meterType]);
+
+  // Auto-fill previousReading from water-only customer's currentReading (as raw units)
+  useEffect(() => {
+    if (!selectedWaterOnlyCustomerId || !meterType) return;
+    const customer = waterOnlyCustomers.find((c) => c.id === selectedWaterOnlyCustomerId);
+    if (customer) {
+      setForm((prev) => ({
+        ...prev,
+        previousReading: String(customer.currentReading * (DIVISORS[meterType] ?? 1)),
+      }));
+    }
+  }, [selectedWaterOnlyCustomerId, meterType, waterOnlyCustomers]);
 
   // ── Render ────────────────────────────────────────────────────────
   return (
@@ -411,6 +459,69 @@ export default function CreateWaterReading() {
               )}
             </FormControl>
 
+            {/* ── or divider ── */}
+            <Box sx={{ display: "flex", alignItems: "center", gap: 1.5, my: 0.5 }}>
+              <Box sx={{ flex: 1, height: 1, bgcolor: borderColor }} />
+              <Typography variant="caption" sx={{ color: textSecondary, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.06em" }}>
+                or
+              </Typography>
+              <Box sx={{ flex: 1, height: 1, bgcolor: borderColor }} />
+            </Box>
+
+            {/* Water-only customer selector */}
+            <Autocomplete
+              options={waterOnlyCustomers}
+              loading={waterOnlyCustomersLoading}
+              value={waterOnlyCustomers.find((c) => c.id === selectedWaterOnlyCustomerId) || null}
+              getOptionLabel={(c) => `${c.firstName} ${c.lastName} · ${c.phoneNumber}`}
+              isOptionEqualToValue={(opt, val) => opt.id === val.id}
+              onChange={(_, customer) => {
+                if (customer) {
+                  // Clear unit selection state (keep building selected — irrelevant in water-only mode)
+                  setSelectedUnitId("");
+                  setLatestReading(null);
+                  setForm({ previousReading: "", currentReading: "" });
+                  setErrors({});
+                  setSelectedWaterOnlyCustomerId(customer.id);
+                  setMeterType(customer.meterType || null);
+                } else {
+                  setSelectedWaterOnlyCustomerId("");
+                  setMeterType(null);
+                  setForm({ previousReading: "", currentReading: "" });
+                  setErrors({});
+                }
+              }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Water-only Customer"
+                  size="small"
+                  sx={fieldSx}
+                  InputProps={{
+                    ...params.InputProps,
+                    startAdornment: (
+                      <>
+                        <InputAdornment position="start">
+                          <PersonIcon sx={{ fontSize: 16, color: textSecondary }} />
+                        </InputAdornment>
+                        {params.InputProps.startAdornment}
+                      </>
+                    ),
+                  }}
+                />
+              )}
+              renderOption={(props, option) => (
+                <Box component="li" {...props} key={option.id}>
+                  <Box sx={{ display: "flex", flexDirection: "column" }}>
+                    <Typography variant="body2">{option.firstName} {option.lastName}</Typography>
+                    <Typography variant="caption" sx={{ color: textSecondary }}>{option.phoneNumber}</Typography>
+                  </Box>
+                </Box>
+              )}
+              noOptionsText={waterOnlyCustomersLoading ? "Loading…" : "No water-only customers found"}
+              sx={{ width: "100%" }}
+            />
+
             {/* Selected unit info card */}
             {selectedUnit && (
               <Paper
@@ -450,8 +561,8 @@ export default function CreateWaterReading() {
             border: `1px solid ${borderColor}`,
             bgcolor: cardBg,
             overflow: "hidden",
-            opacity: selectedUnitId ? 1 : 0.55,
-            pointerEvents: selectedUnitId ? "auto" : "none",
+            opacity: (selectedUnitId || selectedWaterOnlyCustomerId) ? 1 : 0.55,
+            pointerEvents: (selectedUnitId || selectedWaterOnlyCustomerId) ? "auto" : "none",
             transition: "opacity 0.2s ease",
           }}
         >
