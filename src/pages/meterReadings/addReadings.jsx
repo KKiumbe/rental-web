@@ -271,7 +271,7 @@ export default function CreateWaterReading() {
       setUnits([]);
     }
     setSelectedUnitId("");
-    setSelectedWaterOnlyCustomerId("");
+    if (selectedBuildingId) setSelectedWaterOnlyCustomerId("");
     setMeterType(null);
     setForm({ previousReading: "", currentReading: "" });
     setLatestReading(null);
