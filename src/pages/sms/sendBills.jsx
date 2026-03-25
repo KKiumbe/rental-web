@@ -76,12 +76,11 @@ function SendBillsScreen() {
           ? (waterResult.value.data.data || []).map((c) => ({ ...c, type: 'water' }))
           : [];
 
-      if (tenantsResult.status === 'rejected') {
-        setSnackbarMessage('Could not load tenants');
-        setSnackbarOpen(true);
-      }
-      if (waterResult.status === 'rejected') {
-        setSnackbarMessage('Could not load water customers');
+      const errors = [];
+      if (tenantsResult.status === 'rejected') errors.push('tenants');
+      if (waterResult.status === 'rejected') errors.push('water customers');
+      if (errors.length > 0) {
+        setSnackbarMessage(`Could not load: ${errors.join(', ')}`);
         setSnackbarOpen(true);
       }
 
@@ -226,9 +225,10 @@ function SendBillsScreen() {
 
         <Autocomplete
           options={allCustomers}
-          getOptionLabel={(o) =>
-            `${o.firstName} ${o.lastName || ''}`.trim() || o.phoneNumber || `Customer ${o.id}`
-          }
+          getOptionLabel={(o) => {
+            const name = `${o.firstName} ${o.lastName || ''}`.trim() || o.phoneNumber || `Customer ${o.id}`;
+            return o.type === 'water' ? `${name} (Water)` : name;
+          }}
           value={selectedCustomer}
           onChange={(_, v) => setSelectedCustomer(v)}
           renderOption={(props, option) => (
