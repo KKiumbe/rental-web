@@ -12,6 +12,7 @@ import {
   Snackbar,
   Alert,
   Divider,
+  Chip,
 } from '@mui/material';
 import { getTheme } from '../../store/theme';
 import TitleComponent from '../../components/title';
@@ -33,8 +34,8 @@ function SendBillsScreen() {
   const [snackbarMessage, setSnackbarMessage]       = useState('');
 
   // Single-customer state
-  const [customers, setCustomers]                   = useState([]);
-  const [customersLoading, setCustomersLoading]     = useState(false);
+  const [allCustomers, setAllCustomers]                 = useState([]);
+  const [allCustomersLoading, setAllCustomersLoading]   = useState(false);
   const [selectedCustomer, setSelectedCustomer]     = useState(null);
   const [sendingOne, setSendingOne]                 = useState(false);
   const [oneMessage, setOneMessage]                 = useState('');
@@ -57,23 +58,43 @@ function SendBillsScreen() {
     }
   }, []);
 
-  const fetchCustomers = useCallback(async () => {
+  const fetchAllCustomers = useCallback(async () => {
+    setAllCustomersLoading(true);
     try {
-      setCustomersLoading(true);
-      const res = await axios.get(`${BASEURL}/customers`, { withCredentials: true });
-      setCustomers(res.data.customers || []);
-    } catch {
-      setSnackbarMessage('Failed to load customers');
-      setSnackbarOpen(true);
+      const [tenantsResult, waterResult] = await Promise.allSettled([
+        axios.get(`${BASEURL}/customers`, { withCredentials: true }),
+        axios.get(`${BASEURL}/water-only-customers`, { withCredentials: true }),
+      ]);
+
+      const tenants =
+        tenantsResult.status === 'fulfilled'
+          ? (tenantsResult.value.data.customers || []).map((c) => ({ ...c, type: 'tenant' }))
+          : [];
+
+      const waterCustomers =
+        waterResult.status === 'fulfilled'
+          ? (waterResult.value.data.data || []).map((c) => ({ ...c, type: 'water' }))
+          : [];
+
+      if (tenantsResult.status === 'rejected') {
+        setSnackbarMessage('Could not load tenants');
+        setSnackbarOpen(true);
+      }
+      if (waterResult.status === 'rejected') {
+        setSnackbarMessage('Could not load water customers');
+        setSnackbarOpen(true);
+      }
+
+      setAllCustomers([...tenants, ...waterCustomers]);
     } finally {
-      setCustomersLoading(false);
+      setAllCustomersLoading(false);
     }
   }, []);
 
   useEffect(() => {
     fetchBuildings();
-    fetchCustomers();
-  }, [fetchBuildings, fetchCustomers]);
+    fetchAllCustomers();
+  }, [fetchBuildings, fetchAllCustomers]);
 
   const formatPeriod = (date) => {
     if (!date) return '';
@@ -113,7 +134,11 @@ function SendBillsScreen() {
     setSendingOne(true);
     setOneMessage('');
     try {
-      const res = await axios.post(`${BASEURL}/send-bill`, { customerId: selectedCustomer.id }, { withCredentials: true });
+      const payload =
+        selectedCustomer.type === 'water'
+          ? { waterCustomerId: selectedCustomer.id }
+          : { customerId: selectedCustomer.id };
+      const res = await axios.post(`${BASEURL}/send-bill`, payload, { withCredentials: true });
       setOneMessage(res.data.message || 'Bill sent successfully');
       setSelectedCustomer(null);
     } catch (err) {
@@ -200,14 +225,26 @@ function SendBillsScreen() {
         </Typography>
 
         <Autocomplete
-          options={customers}
-          getOptionLabel={(o) => `${o.firstName} ${o.lastName || ''}`.trim() || o.phoneNumber || `Customer ${o.id}`}
+          options={allCustomers}
+          getOptionLabel={(o) =>
+            `${o.firstName} ${o.lastName || ''}`.trim() || o.phoneNumber || `Customer ${o.id}`
+          }
           value={selectedCustomer}
           onChange={(_, v) => setSelectedCustomer(v)}
+          renderOption={(props, option) => (
+            <li {...props} key={option.id}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, width: '100%' }}>
+                <span>{option.firstName} {option.lastName || ''}</span>
+                {option.type === 'water' && (
+                  <Chip label="Water" size="small" color="info" sx={{ ml: 'auto', fontSize: 11 }} />
+                )}
+              </Box>
+            </li>
+          )}
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Search Tenant"
+              label="Search Tenant or Water Customer"
               variant="outlined"
               fullWidth
               margin="normal"
@@ -215,7 +252,7 @@ function SendBillsScreen() {
                 ...params.InputProps,
                 endAdornment: (
                   <>
-                    {customersLoading ? <CircularProgress color="inherit" size={20} /> : null}
+                    {allCustomersLoading ? <CircularProgress color="inherit" size={20} /> : null}
                     {params.InputProps.endAdornment}
                   </>
                 ),
