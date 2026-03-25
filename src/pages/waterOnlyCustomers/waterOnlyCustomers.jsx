@@ -415,11 +415,13 @@ const WaterOnlyCustomers = () => {
               slotProps={{ toolbar: { showQuickFilter: false } }}
               pageSizeOptions={[25, 50, 100]}
               initialState={{ pagination: { paginationModel: { pageSize: 25 } } }}
+              onRowClick={(params) => navigate(`/water-only-customers/${params.id}`)}
               sx={{
                 border: "none",
                 "& .MuiDataGrid-columnHeaders": {
                   bgcolor: theme.palette.background.paper,
                 },
+                "& .MuiDataGrid-row": { cursor: "pointer" },
               }}
             />
           </Paper>
