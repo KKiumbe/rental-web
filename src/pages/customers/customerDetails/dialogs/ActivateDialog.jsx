@@ -12,9 +12,27 @@ import {
 } from "@mui/material";
 import { useTheme } from "@mui/material/styles";
 
-export default function ActivateDialog({ open, onClose, customer, sending, onActivate }) {
+export default function ActivateDialog({
+  open,
+  onClose,
+  customer,
+  sending,
+  onActivate,
+  title = "Activate Tenant",
+  bodyText,
+}) {
   const theme = useTheme();
   const green = theme.palette?.greenAccent?.main || "#388e3c";
+
+  const defaultBody = (
+    <>
+      Activate{" "}
+      <strong>
+        {customer?.firstName} {customer?.lastName}
+      </strong>
+      ? Ensure rent and deposit invoices have been paid.
+    </>
+  );
 
   return (
     <Dialog
@@ -26,17 +44,13 @@ export default function ActivateDialog({ open, onClose, customer, sending, onAct
     >
       <DialogTitle sx={{ pb: 1 }}>
         <Typography variant="h6" fontWeight={700}>
-          Activate Tenant
+          {title}
         </Typography>
       </DialogTitle>
       <Divider />
       <DialogContent sx={{ pt: 2 }}>
         <DialogContentText>
-          Activate{" "}
-          <strong>
-            {customer?.firstName} {customer?.lastName}
-          </strong>
-          ? Ensure rent and deposit invoices have been paid.
+          {bodyText ?? defaultBody}
         </DialogContentText>
       </DialogContent>
       <Divider />
@@ -68,4 +82,6 @@ ActivateDialog.propTypes = {
   customer:   PropTypes.object,
   sending:    PropTypes.bool.isRequired,
   onActivate: PropTypes.func.isRequired,
+  title:      PropTypes.string,
+  bodyText:   PropTypes.node,
 };

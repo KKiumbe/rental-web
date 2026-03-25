@@ -11,7 +11,25 @@ import {
   CircularProgress,
 } from "@mui/material";
 
-export default function DeleteDialog({ open, onClose, customer, sending, onDelete }) {
+export default function DeleteDialog({
+  open,
+  onClose,
+  customer,
+  sending,
+  onDelete,
+  title = "Delete Tenant",
+  bodyText,
+}) {
+  const defaultBody = (
+    <>
+      Are you sure you want to delete{" "}
+      <strong>
+        {customer?.firstName} {customer?.lastName}
+      </strong>
+      ? This action cannot be undone.
+    </>
+  );
+
   return (
     <Dialog
       open={open}
@@ -22,17 +40,13 @@ export default function DeleteDialog({ open, onClose, customer, sending, onDelet
     >
       <DialogTitle sx={{ pb: 1 }}>
         <Typography variant="h6" fontWeight={700}>
-          Delete Tenant
+          {title}
         </Typography>
       </DialogTitle>
       <Divider />
       <DialogContent sx={{ pt: 2 }}>
         <DialogContentText>
-          Are you sure you want to delete{" "}
-          <strong>
-            {customer?.firstName} {customer?.lastName}
-          </strong>
-          ? This action cannot be undone.
+          {bodyText ?? defaultBody}
         </DialogContentText>
       </DialogContent>
       <Divider />
@@ -60,4 +74,6 @@ DeleteDialog.propTypes = {
   customer: PropTypes.object,
   sending:  PropTypes.bool.isRequired,
   onDelete: PropTypes.func.isRequired,
+  title:    PropTypes.string,
+  bodyText: PropTypes.node,
 };
