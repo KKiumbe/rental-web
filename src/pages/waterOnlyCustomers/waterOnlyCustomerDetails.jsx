@@ -4,7 +4,7 @@ import { useNavigate, useParams } from "react-router-dom";
 import { useTheme } from "@mui/material/styles";
 import {
   Box, Button, CircularProgress, Stack, Alert, Snackbar, Typography,
-  Paper, Grid,
+  Paper, Grid, Tooltip, IconButton, Avatar,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import SmsIcon from "@mui/icons-material/Sms";
@@ -17,7 +17,6 @@ import { useAuthStore } from "../../store/authStore";
 import SmsDialog from "../customers/customerDetails/dialogs/SmsDialog";
 import DeleteDialog from "../customers/customerDetails/dialogs/DeleteDialog";
 import ActivateDialog from "../customers/customerDetails/dialogs/ActivateDialog";
-import { Tooltip, IconButton, Avatar } from "@mui/material";
 import { statusChip, getInitials } from "../customers/customerDetails/helpers";
 
 const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
@@ -71,7 +70,7 @@ const WaterOnlyCustomerDetails = () => {
       const res = await axios.get(`${BASEURL}/water-only-customers/${id}`, { withCredentials: true });
       setCustomer(res.data.data);
     } catch (err) {
-      showSnack(err.response?.data?.message || "Failed to load customer details.", "error");
+      setSnackbar({ open: true, msg: err.response?.data?.message || "Failed to load customer details.", severity: "error" });
     } finally {
       setLoading(false);
     }
