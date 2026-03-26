@@ -46,6 +46,7 @@ const CreatePayment = () => {
   const currentUser = useAuthStore((state) => state.currentUser);
   const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
 
+  const [customerType,     setCustomerType]     = useState("regular");
   const [searchMode,       setSearchMode]       = useState("name");
   const [searchQuery,      setSearchQuery]      = useState("");
   const [searchResults,    setSearchResults]    = useState([]);
@@ -78,15 +79,21 @@ const CreatePayment = () => {
     setIsSearching(true);
     try {
       const params = {};
-      if (mode === "name")  params.name       = q;
-      if (mode === "phone") params.phone      = q;
-      if (mode === "unit")  params.unitNumber = q;
-
-      const { data } = await axios.get(`${BASEURL}/search-customers`, { params, withCredentials: true });
-      const results = data?.customers || [];
-      setSearchResults(results);
-      if (!results.length) {
-        setSnackbar({ open: true, message: "No customers found", severity: "info" });
+      if (customerType === "water") {
+        if (mode === "name")  params.name  = q;
+        if (mode === "phone") params.phone = q;
+        const { data } = await axios.get(`${BASEURL}/search-water-only-customers`, { params, withCredentials: true });
+        const results = data?.customers || [];
+        setSearchResults(results);
+        if (!results.length) setSnackbar({ open: true, message: "No water customers found", severity: "info" });
+      } else {
+        if (mode === "name")  params.name       = q;
+        if (mode === "phone") params.phone      = q;
+        if (mode === "unit")  params.unitNumber = q;
+        const { data } = await axios.get(`${BASEURL}/search-customers`, { params, withCredentials: true });
+        const results = data?.customers || [];
+        setSearchResults(results);
+        if (!results.length) setSnackbar({ open: true, message: "No customers found", severity: "info" });
       }
     } catch (err) {
       setSnackbar({
@@ -131,8 +138,9 @@ const CreatePayment = () => {
     }
     setIsProcessing(true);
     try {
+      const endpoint = customerType === "water" ? `${BASEURL}/water-only-customer-payment` : `${BASEURL}/manual-cash-payment`;
       await axios.post(
-        `${BASEURL}/manual-cash-payment`,
+        endpoint,
         {
           customerId: selectedCustomer.id,
           totalAmount: parseFloat(totalAmount),
@@ -162,6 +170,15 @@ const CreatePayment = () => {
     setSelectedCustomer(null);
     setFormData({ totalAmount: "", modeOfPayment: "" });
     setSubmitted(false);
+  };
+
+  const handleCustomerTypeChange = (_, val) => {
+    if (!val) return;
+    setCustomerType(val);
+    setSearchMode("name");
+    setSearchQuery("");
+    setSearchResults([]);
+    setSelectedCustomer(null);
   };
 
   const fieldSx = {
@@ -197,7 +214,7 @@ const CreatePayment = () => {
             Record Payment
           </Typography>
           <Typography variant="caption" sx={{ color: textSecondary }}>
-            Search for a tenant, then enter payment details
+            Search for a tenant or water-only customer, then enter payment details
           </Typography>
         </Box>
       </Box>
@@ -222,6 +239,30 @@ const CreatePayment = () => {
           </Box>
 
           <Box sx={{ p: 2.5, display: "flex", flexDirection: "column", gap: 2 }}>
+            {/* Customer type toggle */}
+            <ToggleButtonGroup
+              value={customerType}
+              exclusive
+              onChange={handleCustomerTypeChange}
+              size="small"
+              fullWidth
+              sx={{
+                "& .MuiToggleButton-root": {
+                  borderColor, color: textSecondary, textTransform: "none",
+                  fontWeight: 600, fontSize: "0.8rem", borderRadius: "8px !important",
+                  "&.Mui-selected": {
+                    bgcolor: alpha(accentBlue, 0.12),
+                    color: accentBlue,
+                    borderColor: alpha(accentBlue, 0.3),
+                  },
+                  "&:hover": { bgcolor: alpha(accentBlue, 0.07) },
+                },
+              }}
+            >
+              <ToggleButton value="regular" sx={{ flex: 1 }}>Regular Tenant</ToggleButton>
+              <ToggleButton value="water" sx={{ flex: 1 }}>Water Only</ToggleButton>
+            </ToggleButtonGroup>
+
             {/* Search mode toggle */}
             <ToggleButtonGroup
               value={searchMode}
@@ -250,7 +291,9 @@ const CreatePayment = () => {
             >
               <ToggleButton value="name"><PersonIcon fontSize="small" /> Name</ToggleButton>
               <ToggleButton value="phone"><PhoneIcon fontSize="small" /> Phone</ToggleButton>
-              <ToggleButton value="unit"><UnitIcon fontSize="small" /> Unit</ToggleButton>
+              {customerType === "regular" && (
+                <ToggleButton value="unit"><UnitIcon fontSize="small" /> Unit</ToggleButton>
+              )}
             </ToggleButtonGroup>
 
             {/* Search input */}
