@@ -20,9 +20,17 @@ import {
   TableRow,
   Paper,
   Box,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  TextField,
+  MenuItem,
+  InputAdornment,
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import PrintIcon from "@mui/icons-material/Print";
+import TuneIcon from "@mui/icons-material/Tune";
 import axios from "axios";
 import TitleComponent from "../../components/title";
 import { useAuthStore } from "../../store/authStore";
@@ -38,6 +46,10 @@ const InvoiceDetails = () => {
   const [snackbarSeverity, setSnackbarSeverity] = useState("info");
   const [downloadLoading, setDownloadLoading] = useState(false);
   const [cancelLoading, setCancelLoading] = useState(false);
+  const [adjustOpen, setAdjustOpen] = useState(false);
+  const [adjustType, setAdjustType] = useState("REDUCE");
+  const [adjustAmount, setAdjustAmount] = useState("");
+  const [adjustLoading, setAdjustLoading] = useState(false);
 
   const BASEURL = import.meta.env.VITE_BASE_URL;
   const currentUser = useAuthStore((state) => state.currentUser);
@@ -212,6 +224,42 @@ const InvoiceDetails = () => {
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
   }, [id]);
+
+  const handleAdjustInvoice = useCallback(async () => {
+    const amt = parseFloat(adjustAmount);
+    if (!amt || amt <= 0) {
+      setSnackbarMessage("Enter a valid positive amount.");
+      setSnackbarSeverity("error");
+      setSnackbarOpen(true);
+      return;
+    }
+    setAdjustLoading(true);
+    try {
+      const response = await axios.patch(
+        `${BASEURL}/invoice/adjust/${id}`,
+        { adjustmentType: adjustType, amount: amt },
+        { withCredentials: true }
+      );
+      setInvoice((prev) => ({
+        ...prev,
+        invoiceAmount: response.data.data.invoice.invoiceAmount,
+        outstandingBalance:
+          response.data.data.invoice.invoiceAmount - prev.amountPaid,
+        closingBalance: response.data.data.customer.closingBalance,
+      }));
+      setSnackbarMessage(response.data.message);
+      setSnackbarSeverity("success");
+      setAdjustOpen(false);
+      setAdjustAmount("");
+    } catch (err) {
+      setSnackbarMessage(err.response?.data?.message || "Failed to adjust invoice.");
+      setSnackbarSeverity("error");
+    } finally {
+      setAdjustLoading(false);
+      setSnackbarOpen(true);
+      setTimeout(() => setSnackbarOpen(false), 4000);
+    }
+  }, [id, adjustType, adjustAmount, BASEURL]);
 
   const renderInvoiceItems = () => {
     if (!invoice?. InvoiceItem || invoice. InvoiceItem.length === 0) {
@@ -448,6 +496,20 @@ const InvoiceDetails = () => {
             >
               Email Invoice
             </Button>
+            {invoice.status !== "CANCELED" && invoice.status !== "PAID" && (
+              <Button
+                variant="contained"
+                startIcon={<TuneIcon />}
+                sx={{
+                  bgcolor: theme.palette.warning?.main || "#ed6c02",
+                  color: "#fff",
+                  "&:hover": { opacity: 0.9 },
+                }}
+                onClick={() => { setAdjustAmount(""); setAdjustOpen(true); }}
+              >
+                Adjust Invoice
+              </Button>
+            )}
             {invoice.status !== "CANCELED" && (
               <Button
                 variant="contained"
@@ -480,6 +542,79 @@ const InvoiceDetails = () => {
               Invoices Page
             </Button>
           </Stack>
+
+          {/* ── Adjust Invoice Dialog ───────────────────────────────── */}
+          <Dialog
+            open={adjustOpen}
+            onClose={() => setAdjustOpen(false)}
+            maxWidth="xs"
+            fullWidth
+            PaperProps={{ sx: { borderRadius: 2, bgcolor: theme.palette.primary.main } }}
+          >
+            <DialogTitle sx={{ color: theme.palette.grey[100], fontWeight: 700, display: "flex", alignItems: "center", gap: 1 }}>
+              <TuneIcon fontSize="small" /> Adjust Invoice Amount
+            </DialogTitle>
+            <Divider sx={{ borderColor: theme.palette.grey[700] }} />
+            <DialogContent sx={{ display: "flex", flexDirection: "column", gap: 2, pt: 2 }}>
+              <Typography variant="body2" sx={{ color: theme.palette.grey[300] }}>
+                Current invoice amount: <strong>KES {Math.round(invoice.invoiceAmount)}</strong>
+              </Typography>
+              <TextField
+                select
+                label="Adjustment Type"
+                value={adjustType}
+                onChange={(e) => setAdjustType(e.target.value)}
+                size="small"
+                fullWidth
+                InputLabelProps={{ style: { color: theme.palette.grey[300] } }}
+                InputProps={{ style: { color: theme.palette.grey[100] } }}
+                sx={{ "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.grey[600] } }}
+              >
+                <MenuItem value="ADD">Add Amount (Increase Balance)</MenuItem>
+                <MenuItem value="REDUCE">Reduce Amount (Decrease Balance)</MenuItem>
+              </TextField>
+              <TextField
+                label="Amount (KES)"
+                type="number"
+                value={adjustAmount}
+                onChange={(e) => setAdjustAmount(e.target.value)}
+                size="small"
+                fullWidth
+                inputProps={{ min: 1 }}
+                InputLabelProps={{ style: { color: theme.palette.grey[300] } }}
+                InputProps={{
+                  style: { color: theme.palette.grey[100] },
+                  startAdornment: <InputAdornment position="start"><Typography sx={{ color: theme.palette.grey[400], fontSize: 13 }}>KES</Typography></InputAdornment>,
+                }}
+                sx={{ "& .MuiOutlinedInput-notchedOutline": { borderColor: theme.palette.grey[600] } }}
+                helperText={
+                  adjustType === "REDUCE"
+                    ? `Max reducible: KES ${Math.round(invoice.invoiceAmount - invoice.amountPaid)}`
+                    : " "
+                }
+                FormHelperTextProps={{ style: { color: theme.palette.grey[400] } }}
+              />
+            </DialogContent>
+            <Divider sx={{ borderColor: theme.palette.grey[700] }} />
+            <DialogActions sx={{ px: 3, py: 1.5 }}>
+              <Button onClick={() => setAdjustOpen(false)} disabled={adjustLoading} sx={{ color: theme.palette.grey[300] }}>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleAdjustInvoice}
+                disabled={adjustLoading || !adjustAmount}
+                sx={{
+                  bgcolor: theme.palette.warning?.main || "#ed6c02",
+                  color: "#fff",
+                  fontWeight: 700,
+                  "&:hover": { opacity: 0.9 },
+                }}
+              >
+                {adjustLoading ? <CircularProgress size={18} sx={{ color: "#fff" }} /> : "Confirm Adjustment"}
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           <Snackbar
             open={snackbarOpen}
