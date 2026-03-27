@@ -24,6 +24,7 @@ import {
   Payments as PaymentsIcon,
   CheckCircleOutline as CheckCircleIcon,
   AccountBalanceWallet as WalletIcon,
+  Print as PrintIcon,
 } from "@mui/icons-material";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
@@ -56,6 +57,8 @@ const CreatePayment = () => {
   const [snackbar,         setSnackbar]         = useState({ open: false, message: "", severity: "info" });
   const [isProcessing,     setIsProcessing]     = useState(false);
   const [submitted,        setSubmitted]        = useState(false);
+  const [receiptData,      setReceiptData]      = useState(null);
+  const [isPrinting,       setIsPrinting]       = useState(false);
 
   const isDark        = theme.palette.mode === "dark";
   const surfaceBg     = isDark ? "#141824" : "#f4f6fb";
@@ -71,7 +74,7 @@ const CreatePayment = () => {
     if (!currentUser) navigate("/login");
   }, [currentUser, navigate]);
 
-  const handleSearch = async (query, mode) => {
+  const handleSearch = async (query, mode, type) => {
     const q = (query || "").trim();
     if (!q) { setSearchResults([]); return; }
     if (mode === "phone" && q.length < 10) { setSearchResults([]); return; }
@@ -79,7 +82,7 @@ const CreatePayment = () => {
     setIsSearching(true);
     try {
       const params = {};
-      if (customerType === "water") {
+      if (type === "water") {
         if (mode === "name")  params.name  = q;
         if (mode === "phone") params.phone = q;
         const { data } = await axios.get(`${BASEURL}/search-water-only-customers`, { params, withCredentials: true });
@@ -113,13 +116,13 @@ const CreatePayment = () => {
   };
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const debouncedSearch = useCallback(debounce((q, m) => handleSearch(q, m), 500), []);
+  const debouncedSearch = useCallback(debounce((q, m, t) => handleSearch(q, m, t), 500), []);
 
   const handleInputChange = (e, value) => {
     const v = e?.target?.value ?? value ?? "";
     setSearchQuery(v);
     setSelectedCustomer(null);
-    debouncedSearch(v, searchMode);
+    debouncedSearch(v, searchMode, customerType);
   };
 
   const handleCustomerSelect = (_, newValue) => {
@@ -139,7 +142,7 @@ const CreatePayment = () => {
     setIsProcessing(true);
     try {
       const endpoint = customerType === "water" ? `${BASEURL}/water-only-customer-payment` : `${BASEURL}/manual-cash-payment`;
-      await axios.post(
+      const { data } = await axios.post(
         endpoint,
         {
           customerId: selectedCustomer.id,
@@ -149,9 +152,14 @@ const CreatePayment = () => {
         },
         { withCredentials: true }
       );
+      if (customerType === "water") {
+        setReceiptData({ type: "water", paymentId: data.paymentId });
+      } else {
+        const receiptId = data.receipts?.[0]?.id;
+        if (receiptId) setReceiptData({ type: "regular", receiptId });
+      }
       setSubmitted(true);
       setSnackbar({ open: true, message: "Payment recorded successfully", severity: "success" });
-      setTimeout(() => navigate("/payments"), 2200);
     } catch (err) {
       setSnackbar({
         open: true,
@@ -163,6 +171,28 @@ const CreatePayment = () => {
     }
   };
 
+  const handlePrintReceipt = async () => {
+    if (!receiptData) return;
+    setIsPrinting(true);
+    try {
+      const endpoint = receiptData.type === "water"
+        ? `${BASEURL}/download-water-receipt/${receiptData.paymentId}`
+        : `${BASEURL}/download-receipt/${receiptData.receiptId}`;
+      const response = await axios.get(endpoint, { withCredentials: true, responseType: "blob" });
+      const blob = new Blob([response.data], { type: "application/pdf" });
+      const url = window.URL.createObjectURL(blob);
+      const printWindow = window.open(url, "_blank");
+      if (printWindow) {
+        printWindow.addEventListener("load", () => { printWindow.focus(); printWindow.print(); });
+      }
+      setTimeout(() => window.URL.revokeObjectURL(url), 60000);
+    } catch (err) {
+      setSnackbar({ open: true, message: "Failed to print receipt: " + (err.response?.data?.message || err.message), severity: "error" });
+    } finally {
+      setIsPrinting(false);
+    }
+  };
+
   const resetSearch = () => {
     setSearchMode("name");
     setSearchQuery("");
@@ -170,6 +200,7 @@ const CreatePayment = () => {
     setSelectedCustomer(null);
     setFormData({ totalAmount: "", modeOfPayment: "" });
     setSubmitted(false);
+    setReceiptData(null);
   };
 
   const handleCustomerTypeChange = (_, val) => {
@@ -349,7 +380,7 @@ const CreatePayment = () => {
                   onChange={(e) => {
                     setSearchQuery(e.target.value);
                     setSelectedCustomer(null);
-                    debouncedSearch(e.target.value, searchMode);
+                    debouncedSearch(e.target.value, searchMode, customerType);
                   }}
                   fullWidth
                   disabled={isSearching}
@@ -570,14 +601,35 @@ const CreatePayment = () => {
             </Button>
 
             {submitted && (
-              <Button
-                variant="text"
-                onClick={resetSearch}
-                size="small"
-                sx={{ color: textSecondary, textTransform: "none", fontSize: "0.8rem", "&:hover": { color: accentGreen } }}
-              >
-                Record another payment
-              </Button>
+              <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
+                {receiptData && (
+                  <Button
+                    variant="outlined"
+                    onClick={handlePrintReceipt}
+                    disabled={isPrinting}
+                    startIcon={isPrinting ? <CircularProgress size={16} /> : <PrintIcon />}
+                    fullWidth
+                    sx={{
+                      borderColor: alpha(accentBlue, 0.4),
+                      color: accentBlue,
+                      textTransform: "none",
+                      fontWeight: 600,
+                      borderRadius: 1.5,
+                      "&:hover": { borderColor: accentBlue, bgcolor: alpha(accentBlue, 0.06) },
+                    }}
+                  >
+                    {isPrinting ? "Preparing..." : "Print Receipt"}
+                  </Button>
+                )}
+                <Button
+                  variant="text"
+                  onClick={resetSearch}
+                  size="small"
+                  sx={{ color: textSecondary, textTransform: "none", fontSize: "0.8rem", "&:hover": { color: accentGreen } }}
+                >
+                  Record another payment
+                </Button>
+              </Box>
             )}
           </Box>
         </Paper>

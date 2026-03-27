@@ -15,6 +15,7 @@ import SmsDialog           from "./customerDetails/dialogs/SmsDialog";
 import DeleteDialog        from "./customerDetails/dialogs/DeleteDialog";
 import ActivateDialog      from "./customerDetails/dialogs/ActivateDialog";
 import ManageLeaseDialog   from "./customerDetails/dialogs/ManageLeaseDialog";
+import SendBillDialog      from "./customerDetails/dialogs/SendBillDialog";
 
 const BASEURL = import.meta.env.VITE_BASE_URL || "https://taqa.co.ke/api";
 
@@ -38,6 +39,8 @@ const CustomerDetails = () => {
   const [openLeaseDialog,     setOpenLeaseDialog]     = useState(false);
   const [openDeleteDialog,    setOpenDeleteDialog]    = useState(false);
   const [openTerminateDialog, setOpenTerminateDialog] = useState(false);
+  const [openSendBillDialog,  setOpenSendBillDialog]  = useState(false);
+  const [billPeriod,          setBillPeriod]          = useState(null);
   const [openStatusDialog,    setOpenStatusDialog]    = useState(false);
   const [terminationReason,   setTerminationReason]   = useState("");
   const [terminationDate,     setTerminationDate]     = useState("");
@@ -83,12 +86,17 @@ const CustomerDetails = () => {
   };
 
   const sendBill = async () => {
+    if (!billPeriod) { showSnack("Please select a billing period.", "warning"); return; }
+    const y = billPeriod.getFullYear();
+    const m = String(billPeriod.getMonth() + 1).padStart(2, "0");
     setSending(true);
     try {
       await axios.post(`${BASEURL}/send-bill`,
-        { customerId: customer?.id, unitId: selectedUnitId },
+        { customerId: customer?.id, period: `${y}-${m}` },
         { withCredentials: true });
       showSnack("Invoice sent successfully");
+      setOpenSendBillDialog(false);
+      setBillPeriod(null);
     } catch (err) {
       showSnack(err.response?.data?.message || "Failed to send invoice.", "error");
     } finally { setSending(false); }
@@ -224,7 +232,7 @@ const CustomerDetails = () => {
         sending={sending}
         selectedUnitId={selectedUnitId}
         onSmsOpen={() => setOpenSmsDialog(true)}
-        onSendBill={sendBill}
+        onSendBill={() => setOpenSendBillDialog(true)}
         onLeaseOpen={() => setOpenLeaseDialog(true)}
         onDeleteOpen={() => setOpenDeleteDialog(true)}
       />
@@ -246,6 +254,16 @@ const CustomerDetails = () => {
       />
 
       {/* ── Dialogs ──────────────────────────────────────────────────────── */}
+      <SendBillDialog
+        open={openSendBillDialog}
+        onClose={() => { setOpenSendBillDialog(false); setBillPeriod(null); }}
+        customer={customer}
+        sending={sending}
+        onSend={sendBill}
+        selectedPeriod={billPeriod}
+        setSelectedPeriod={setBillPeriod}
+      />
+
       <SmsDialog
         open={openSmsDialog}
         onClose={() => setOpenSmsDialog(false)}
