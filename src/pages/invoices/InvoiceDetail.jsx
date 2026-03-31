@@ -82,7 +82,7 @@ const InvoiceDetails = () => {
     setSnackbarMessage("Opening the invoice...");
     setSnackbarOpen(true);
     fetchInvoiceDetails();
-  }, [id, BASEURL]);
+  }, [id, BASEURL, fetchInvoiceDetails]);
 
   const fetchInvoiceDetails = useCallback(async () => {
     try {
@@ -205,7 +205,7 @@ const InvoiceDetails = () => {
       setCancelLoading(false);
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
-  }, [id, invoice]);
+  }, [id, invoice, BASEURL]);
 
   const handleEmailInvoice = useCallback(async () => {
     setSnackbarMessage("Emailing invoice...");
@@ -223,7 +223,7 @@ const InvoiceDetails = () => {
     } finally {
       setTimeout(() => setSnackbarOpen(false), 4000);
     }
-  }, [id]);
+  }, [id, BASEURL]);
 
   const handleAdjustInvoice = useCallback(async () => {
     const amt = parseFloat(adjustAmount);

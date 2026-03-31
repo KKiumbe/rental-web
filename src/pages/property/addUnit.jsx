@@ -1,4 +1,4 @@
-import React, { useEffect, useState, Component } from 'react';
+import { useEffect, useState, useCallback, Component } from 'react';
 import axios from 'axios';
 import {
   Box,
@@ -48,7 +48,7 @@ const AddUnitScreen = () => {
   const { buildingId } = useParams();
   const currentUser = useAuthStore((state) => state.currentUser);
   const theme = getTheme();
-  const BASE_URL = import.meta.env.VITE_BASE_URL;
+  const BASE_URL = import.meta.env.VITE_BASE_URL || 'http://localhost:5000/api';
 
   const [unitForm, setUnitForm] = useState({
     buildingId: buildingId || '',
@@ -76,7 +76,7 @@ const AddUnitScreen = () => {
   }, [currentUser, navigate]);
 
   // Fetch building details by buildingId or all buildings if no buildingId
-  const fetchBuilding = async () => {
+  const fetchBuilding = useCallback(async () => {
     setBuildingsLoading(true);
     try {
       if (buildingId) {
@@ -84,7 +84,7 @@ const AddUnitScreen = () => {
         const response = await axios.get(`${BASE_URL}/buildings/${buildingId}`, {
           withCredentials: true,
         });
-        const building = response.data;
+        const building = response.data?.building || response.data?.data || response.data;
         if (!building?.id) {
           throw new Error('Building data is invalid or missing');
         }
@@ -103,8 +103,9 @@ const AddUnitScreen = () => {
           params: { minimal: true },
           withCredentials: true,
         });
-        const buildingsData = Array.isArray(response.data.buildings)
-          ? response.data.buildings.map((b) => ({
+        const buildingList = response.data?.buildings || response.data?.data || [];
+        const buildingsData = Array.isArray(buildingList)
+          ? buildingList.map((b) => ({
               id: b.id,
               buildingName: b.name || b.buildingName || 'Unnamed',
               landlord: { name: b.landlord?.name || 'Unknown' },
@@ -125,12 +126,12 @@ const AddUnitScreen = () => {
     } finally {
       setBuildingsLoading(false);
     }
-  };
+  }, [BASE_URL, buildingId, navigate]);
 
   useEffect(() => {
     console.log('useEffect triggered for fetchBuilding, buildingId:', buildingId);
     fetchBuilding();
-  }, [buildingId]);
+  }, [buildingId, fetchBuilding]);
 
   // Validate unit form
   const validateUnitForm = () => {
@@ -170,6 +171,7 @@ const AddUnitScreen = () => {
     try {
       const payload = {
         ...unitForm,
+        unitNumber: unitForm.unitNumber.trim(),
         monthlyCharge: Number(unitForm.monthlyCharge),
         depositAmount: Number(unitForm.depositAmount),
         waterDepositAmount: unitForm.waterDepositAmount ? Number(unitForm.waterDepositAmount) : 0,

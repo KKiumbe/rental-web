@@ -1,4 +1,4 @@
-import { useEffect, useState, Component } from 'react';
+import { useEffect, useState, useCallback, Component } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import {
@@ -164,7 +164,7 @@ const BuildingDetailsScreen = () => {
     }
   }, [currentUser, navigate]);
 
-  const fetchBuilding = async () => {
+  const fetchBuilding = useCallback(async () => {
     try {
       setLoading(true);
       const response = await axios.get(`${BASE_URL}/buildings/${id}`, {
@@ -185,7 +185,7 @@ const BuildingDetailsScreen = () => {
     } finally {
       setLoading(false);
     }
-  };
+  }, [BASE_URL, id, navigate]);
 
   const fetchUnit = async (unitId) => {
     try {
@@ -593,7 +593,7 @@ const BuildingDetailsScreen = () => {
 
   useEffect(() => {
     if (id) fetchBuilding();
-  }, [id]);
+  }, [id, fetchBuilding]);
 
   // ── Render ─────────────────────────────────────────────────────────────────
 

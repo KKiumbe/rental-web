@@ -26,7 +26,6 @@ import {
   ReceiptLong,
   Business,
   Water,
-  WaterDrop,
   FlashOn, // Icon for Electricity
   LocalGasStation, // Icon for Gas
 } from "@mui/icons-material";
@@ -48,7 +47,6 @@ const Sidebar = () => {
     properties: false,
     utilities: false,
     expenses: false,
-    waterClients: false,
   });
 
   // Toggle sidebar
@@ -138,31 +136,6 @@ const Sidebar = () => {
                 <FlashOn sx={{ fontSize: 20 }} />
               </ListItemIcon>
               {open && <ListItemText primary="Electricity" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-          </List>
-        </Collapse>
-
-        {/* Water Clients Menu */}
-        <ListItem button onClick={() => toggleSubmenu("waterClients")} sx={{ py: 1 }}>
-          <ListItemIcon sx={{ minWidth: 40 }}>
-            <WaterDrop sx={{ fontSize: 24 }} />
-          </ListItemIcon>
-          {open && <ListItemText primary="Water Clients" sx={{ fontSize: "0.9rem" }} />}
-          {open && (submenuOpen.waterClients ? <ExpandLess /> : <ExpandMore />)}
-        </ListItem>
-        <Collapse in={submenuOpen.waterClients} timeout="auto" unmountOnExit>
-          <List component="div" disablePadding>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/water-only-customers")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <WaterDrop sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="View" sx={{ fontSize: "0.8rem" }} />}
-            </ListItem>
-            <ListItem button sx={{ pl: 3, py: 0.5 }} onClick={() => navigate("/water-only-customers?add=true")}>
-              <ListItemIcon sx={{ minWidth: 30 }}>
-                <Add sx={{ fontSize: 20 }} />
-              </ListItemIcon>
-              {open && <ListItemText primary="Add" sx={{ fontSize: "0.8rem" }} />}
             </ListItem>
           </List>
         </Collapse>
